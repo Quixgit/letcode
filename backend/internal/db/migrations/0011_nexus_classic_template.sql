@@ -1,0 +1,13 @@
+ALTER TABLE site_templates ADD COLUMN theme_config JSONB NOT NULL DEFAULT '{}';
+
+INSERT INTO site_templates (name, slug, description, header_config, footer_config, theme_config, is_active, default_sections) VALUES
+(
+    'Nexus Classic',
+    'nexus-classic',
+    'Светлый лендинг с красным акцентом: круговой gauge в hero, чередующиеся белые/серые секции, витрины мокапов и категорийные карточки.',
+    '{"menu_alignment": "right", "logo_position": "left", "sticky": true, "show_cta_button": false}',
+    '{"menu_alignment": "left"}',
+    '{"accent": "#E63946", "text": "#1A1A1A", "text_muted": "#6B6B6B", "card_bg": "#FFFFFF", "page_bg": "#FAFAFA", "section_alt_bg": "#F0F0F0", "footer_bg": "#F4F6F9"}',
+    false,
+    '[{"type": "app_mockup_panel", "compact": false, "panels": [{"title": "Sources", "description": "Alertmanager, Grafana, webhooks — all in one place.", "mockup": "toggles"}, {"title": "Live alerts", "description": "Every alert, tagged by severity, as it happens.", "mockup": "chart", "dark": true}]}, {"type": "annotated_screenshot", "image_media_id": "", "image_url": "", "annotations": [{"text": "Filter by source", "side": "left", "y_percent": 25}, {"text": "Severity badges", "side": "left", "y_percent": 60}, {"text": "Tap for details", "side": "right", "y_percent": 40}, {"text": "Swipe to acknowledge", "side": "right", "y_percent": 75}]}, {"type": "category_preview_row", "categories": [{"title": "Sources", "rows": [{"label": "Alertmanager", "kind": "toggle", "on": true}, {"label": "Grafana", "kind": "toggle", "on": true}]}, {"title": "Alerts", "rows": [{"label": "Critical", "kind": "slider", "value": 80}, {"label": "Warning", "kind": "slider", "value": 45}]}, {"title": "Settings", "rows": [{"label": "Escalation", "kind": "toggle", "on": true}, {"label": "Quiet hours", "kind": "toggle", "on": false}]}]}, {"type": "progress_dots"}, {"type": "feature_grid", "columns": 2, "items": [{"icon": "ti-bell-ringing", "title": "One inbox for every alert", "description": "Alertmanager, Grafana, Uptime Kuma and webhooks, grouped in one feed."}, {"icon": "ti-users", "title": "Built for on-call teams", "description": "Escalation policies and shared schedules keep everyone in sync."}, {"icon": "ti-devices", "title": "Real push notifications", "description": "Not another email digest — an actual alert on your phone."}, {"icon": "ti-lock", "title": "Your data, retained briefly", "description": "30-day retention, then permanently deleted. Export anytime."}]}, {"type": "how_it_works", "steps": [{"icon": "ti-plug", "label": "Connect a source"}, {"icon": "ti-bell-ringing", "label": "Alerts land in your feed"}, {"icon": "ti-checkbox", "label": "Acknowledge and resolve"}]}, {"type": "testimonials_carousel"}]'
+);

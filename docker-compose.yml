@@ -1,0 +1,55 @@
+services:
+  lecode-postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: lecode
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-lecode}
+      POSTGRES_DB: lecode
+    volumes:
+      - lecode_postgres_data:/var/lib/postgresql/data
+    networks:
+      - lecode-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lecode -d lecode"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  lecode-redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    networks:
+      - lecode-net
+
+  lecode-backend:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      lecode-postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://lecode:${POSTGRES_PASSWORD:-lecode}@lecode-postgres:5432/lecode?sslmode=disable
+      PORT: 8082
+    volumes:
+      - lecode_uploads:/app/uploads
+    networks:
+      - lecode-net
+
+  lecode-frontend:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      - lecode-backend
+    environment:
+      NEXT_PUBLIC_API_URL: http://lecode-backend:8082
+    networks:
+      - lecode-net
+
+networks:
+  lecode-net:
+    external: true
+
+volumes:
+  lecode_postgres_data:
+  lecode_uploads:

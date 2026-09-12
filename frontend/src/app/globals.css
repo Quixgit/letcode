@@ -1,0 +1,474 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-ubuntu), "Ubuntu", Arial, Helvetica, sans-serif;
+}
+
+/* ==========================================================================
+   Admin console design tokens — flat, neutral "dashboard" language
+   (Linear/Vercel/Stripe-dashboard direction, deliberately not Material).
+   The public site (app/(site)/**, components/site/**) is styled entirely
+   with inline styles / plain hex and never references these `md-*` classes,
+   so retheming them here cannot visually affect it. The `md-*` prefix is
+   kept purely so existing admin components/screens didn't need renaming —
+   there is nothing Material about the values below.
+   Accent is the same dark navy already used on the public site (#17181C).
+   ========================================================================== */
+:root {
+  /* accent — used sparingly: primary buttons, links, focus rings */
+  --md-primary: #17181c;
+  --md-on-primary: #ffffff;
+  --md-primary-container: #f4f4f5;
+  --md-on-primary-container: #17181c;
+  --md-inverse-primary: #e4e4e7;
+
+  /* soft "selected/active" tone — never a solid fill (sidebar active item, active tab) */
+  --md-secondary: #52525b;
+  --md-on-secondary: #ffffff;
+  --md-secondary-container: #f4f4f5;
+  --md-on-secondary-container: #18181b;
+
+  --md-tertiary: #52525b;
+  --md-on-tertiary: #ffffff;
+  --md-tertiary-container: #f4f4f5;
+  --md-on-tertiary-container: #18181b;
+
+  --md-error: #dc2626;
+  --md-on-error: #ffffff;
+  --md-error-container: #fef2f2;
+  --md-on-error-container: #b91c1c;
+
+  --md-success: #16a34a;
+  --md-on-success: #ffffff;
+  --md-success-container: #f0fdf4;
+  --md-on-success-container: #15803d;
+  --md-warning: #d97706;
+  --md-on-warning: #ffffff;
+  --md-warning-container: #fffbeb;
+  --md-on-warning-container: #b45309;
+
+  /* neutral surfaces — near-white page, white cards, thin gray borders */
+  --md-background: #fafaf9;
+  --md-on-background: #18181b;
+  --md-surface: #fafaf9;
+  --md-on-surface: #18181b;
+  --md-surface-variant: #f4f4f5;
+  --md-on-surface-variant: #71717a;
+  --md-outline: #a1a1aa;
+  --md-outline-variant: #e4e4e7;
+
+  --md-surface-container-lowest: #ffffff;
+  --md-surface-container-low: #ffffff;
+  --md-surface-container: #ffffff;
+  --md-surface-container-high: #f4f4f5;
+  --md-surface-container-highest: #e4e4e7;
+
+  --md-inverse-surface: #18181b;
+  --md-inverse-on-surface: #fafaf9;
+  --md-scrim: #000000;
+
+  /* shape scale — moderate, near-uniform (per spec: no M3-style spread) */
+  --md-shape-none: 0px;
+  --md-shape-xs: 6px;
+  --md-shape-sm: 8px;
+  --md-shape-md: 10px;
+  --md-shape-lg: 12px;
+  --md-shape-xl: 14px;
+  --md-shape-full: 9999px;
+
+  /* elevation — flat by design: nothing above a hairline shadow */
+  --md-elevation-0: none;
+  --md-elevation-1: 0 1px 2px 0 rgba(0, 0, 0, 0.04);
+  --md-elevation-2: 0 1px 2px 0 rgba(0, 0, 0, 0.04);
+  --md-elevation-3: 0 1px 2px 0 rgba(0, 0, 0, 0.04);
+  --md-elevation-4: 0 1px 2px 0 rgba(0, 0, 0, 0.04);
+  --md-elevation-5: 0 1px 2px 0 rgba(0, 0, 0, 0.04);
+
+  /* motion */
+  --md-easing-standard: cubic-bezier(0.2, 0, 0, 1);
+  --md-easing-emphasized: cubic-bezier(0.3, 0, 0, 1);
+  --md-easing-emphasized-decelerate: cubic-bezier(0.05, 0.7, 0.1, 1);
+  --md-easing-emphasized-accelerate: cubic-bezier(0.3, 0, 0.8, 0.15);
+  --md-duration-short: 120ms;
+  --md-duration-medium: 180ms;
+  --md-duration-long: 280ms;
+}
+
+:root[data-md-theme="dark"] {
+  --md-primary: #f4f4f5;
+  --md-on-primary: #18181b;
+  --md-primary-container: #27272a;
+  --md-on-primary-container: #f4f4f5;
+  --md-inverse-primary: #18181b;
+
+  --md-secondary: #d4d4d8;
+  --md-on-secondary: #18181b;
+  --md-secondary-container: #27272a;
+  --md-on-secondary-container: #fafafa;
+
+  --md-tertiary: #d4d4d8;
+  --md-on-tertiary: #18181b;
+  --md-tertiary-container: #27272a;
+  --md-on-tertiary-container: #fafafa;
+
+  --md-error: #f87171;
+  --md-on-error: #450a0a;
+  --md-error-container: #3f1212;
+  --md-on-error-container: #fecaca;
+
+  --md-success: #4ade80;
+  --md-on-success: #052e16;
+  --md-success-container: #0f2a1a;
+  --md-on-success-container: #bbf7d0;
+  --md-warning: #fbbf24;
+  --md-on-warning: #451a03;
+  --md-warning-container: #3a2408;
+  --md-on-warning-container: #fde68a;
+
+  --md-background: #0a0a0a;
+  --md-on-background: #fafafa;
+  --md-surface: #0a0a0a;
+  --md-on-surface: #fafafa;
+  --md-surface-variant: #27272a;
+  --md-on-surface-variant: #a1a1aa;
+  --md-outline: #52525b;
+  --md-outline-variant: #27272a;
+
+  --md-surface-container-lowest: #000000;
+  --md-surface-container-low: #131314;
+  --md-surface-container: #18181b;
+  --md-surface-container-high: #27272a;
+  --md-surface-container-highest: #3f3f46;
+
+  --md-inverse-surface: #fafafa;
+  --md-inverse-on-surface: #18181b;
+
+  --md-elevation-1: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+  --md-elevation-2: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+  --md-elevation-3: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+  --md-elevation-4: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+  --md-elevation-5: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+}
+
+@theme inline {
+  --color-md-primary: var(--md-primary);
+  --color-md-on-primary: var(--md-on-primary);
+  --color-md-primary-container: var(--md-primary-container);
+  --color-md-on-primary-container: var(--md-on-primary-container);
+  --color-md-inverse-primary: var(--md-inverse-primary);
+
+  --color-md-secondary: var(--md-secondary);
+  --color-md-on-secondary: var(--md-on-secondary);
+  --color-md-secondary-container: var(--md-secondary-container);
+  --color-md-on-secondary-container: var(--md-on-secondary-container);
+
+  --color-md-tertiary: var(--md-tertiary);
+  --color-md-on-tertiary: var(--md-on-tertiary);
+  --color-md-tertiary-container: var(--md-tertiary-container);
+  --color-md-on-tertiary-container: var(--md-on-tertiary-container);
+
+  --color-md-error: var(--md-error);
+  --color-md-on-error: var(--md-on-error);
+  --color-md-error-container: var(--md-error-container);
+  --color-md-on-error-container: var(--md-on-error-container);
+
+  --color-md-success: var(--md-success);
+  --color-md-on-success: var(--md-on-success);
+  --color-md-success-container: var(--md-success-container);
+  --color-md-on-success-container: var(--md-on-success-container);
+
+  --color-md-warning: var(--md-warning);
+  --color-md-on-warning: var(--md-on-warning);
+  --color-md-warning-container: var(--md-warning-container);
+  --color-md-on-warning-container: var(--md-on-warning-container);
+
+  --color-md-background: var(--md-background);
+  --color-md-on-background: var(--md-on-background);
+  --color-md-surface: var(--md-surface);
+  --color-md-on-surface: var(--md-on-surface);
+  --color-md-surface-variant: var(--md-surface-variant);
+  --color-md-on-surface-variant: var(--md-on-surface-variant);
+  --color-md-outline: var(--md-outline);
+  --color-md-outline-variant: var(--md-outline-variant);
+
+  --color-md-surface-container-lowest: var(--md-surface-container-lowest);
+  --color-md-surface-container-low: var(--md-surface-container-low);
+  --color-md-surface-container: var(--md-surface-container);
+  --color-md-surface-container-high: var(--md-surface-container-high);
+  --color-md-surface-container-highest: var(--md-surface-container-highest);
+
+  --color-md-inverse-surface: var(--md-inverse-surface);
+  --color-md-inverse-on-surface: var(--md-inverse-on-surface);
+
+  /* shape scale feeds Tailwind's radius utilities directly — the public
+     site never uses rounded-md/lg/xl (it styles corners inline), so this
+     redefinition is admin-only in practice. */
+  --radius-md: var(--md-shape-sm);
+  --radius-lg: var(--md-shape-md);
+  --radius-xl: var(--md-shape-lg);
+  --radius-2xl: var(--md-shape-xl);
+
+  --font-admin: var(--font-inter), Inter, Roboto, "Segoe UI", sans-serif;
+}
+
+/* ---- type scale — collapsed to ~3 practical sizes, weight capped at 500 */
+.md-display-large,
+.md-display-medium,
+.md-display-small   { font-size: 28px; line-height: 36px; font-weight: 500; letter-spacing: -0.01em; }
+.md-headline-large,
+.md-headline-medium,
+.md-headline-small  { font-size: 20px; line-height: 28px; font-weight: 500; letter-spacing: -0.01em; }
+.md-title-large,
+.md-title-medium,
+.md-title-small      { font-size: 14px; line-height: 20px; font-weight: 500; }
+.md-body-large       { font-size: 14px; line-height: 22px; font-weight: 400; }
+.md-body-medium      { font-size: 13px; line-height: 20px; font-weight: 400; }
+.md-body-small       { font-size: 12px; line-height: 18px; font-weight: 400; }
+.md-label-large      { font-size: 13px; line-height: 18px; font-weight: 500; }
+.md-label-medium     { font-size: 12px; line-height: 16px; font-weight: 500; }
+.md-label-small      { font-size: 11px; line-height: 16px; font-weight: 500; }
+
+/* ---- elevation helpers ------------------------------------------------ */
+.md-elevation-0 { box-shadow: var(--md-elevation-0); }
+.md-elevation-1 { box-shadow: var(--md-elevation-1); }
+.md-elevation-2 { box-shadow: var(--md-elevation-2); }
+.md-elevation-3 { box-shadow: var(--md-elevation-3); }
+.md-elevation-4 { box-shadow: var(--md-elevation-4); }
+.md-elevation-5 { box-shadow: var(--md-elevation-5); }
+
+/* ---- shared motion -------------------------------------------------- */
+.md-motion {
+  transition-timing-function: var(--md-easing-emphasized);
+  transition-duration: var(--md-duration-medium);
+}
+
+.md-card--interactive {
+  cursor: pointer;
+}
+.md-card--interactive:hover {
+  border-color: var(--md-outline) !important;
+}
+
+.md-dialog-scrim {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+@keyframes md-snackbar-in {
+  from { transform: translateY(16px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+@keyframes md-dialog-in {
+  from { transform: scale(0.98) translateY(4px); opacity: 0; }
+  to { transform: scale(1) translateY(0); opacity: 1; }
+}
+@keyframes md-scrim-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes md-page-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.md-admin-root {
+  font-family: var(--font-admin);
+  background: var(--md-surface);
+  color: var(--md-on-surface);
+  color-scheme: light;
+}
+:root[data-md-theme="dark"] .md-admin-root {
+  color-scheme: dark;
+}
+
+/* ==========================================================================
+   Public site — light motion layer (hover states + scroll-reveal).
+   Scoped to a couple of small, deliberately named classes so they can be
+   dropped onto the existing inline-styled components without pulling the
+   public site into the admin's md-* theme system.
+   ========================================================================== */
+.site-hover-card {
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.site-hover-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 24px rgba(23, 24, 28, 0.08);
+}
+
+.site-root a,
+.site-root button {
+  transition: opacity 0.15s ease, transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+}
+.site-root a:hover,
+.site-root button:hover {
+  opacity: 0.85;
+}
+.site-root a:active,
+.site-root button:active {
+  transform: scale(0.97);
+}
+
+/* Header mega menu / dropdown + mobile nav accordion */
+@keyframes site-mega-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.site-mega-panel {
+  animation: site-mega-panel-in 180ms ease;
+}
+
+.site-nav-desktop {
+  display: flex;
+}
+.site-nav-mobile-toggle {
+  display: none;
+}
+.site-nav-mobile-panel {
+  display: block;
+}
+
+@media (max-width: 860px) {
+  .site-nav-desktop {
+    display: none !important;
+  }
+  .site-nav-mobile-toggle {
+    display: flex !important;
+  }
+  .site-cta-desktop {
+    display: none !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .site-feature-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .site-mega-panel {
+    animation: none;
+  }
+}
+
+.site-richtext {
+  font-size: 15px;
+  color: #17181c;
+  line-height: 1.8;
+}
+.site-richtext > *:first-child {
+  margin-top: 0;
+}
+.site-richtext > *:last-child {
+  margin-bottom: 0;
+}
+.site-richtext p {
+  margin: 0 0 1rem;
+}
+.site-richtext h2 {
+  font-size: 20px;
+  font-weight: 500;
+  color: #17181c;
+  margin: 2rem 0 1rem;
+}
+.site-richtext h3 {
+  font-size: 17px;
+  font-weight: 500;
+  color: #17181c;
+  margin: 1.5rem 0 0.75rem;
+}
+.site-richtext a {
+  color: #17181c;
+  text-decoration: underline;
+}
+.site-richtext img {
+  max-width: 100%;
+  border-radius: 12px;
+  margin: 1rem 0;
+  display: block;
+}
+.site-richtext ul,
+.site-richtext ol {
+  margin: 0 0 1rem;
+  padding-left: 1.25rem;
+}
+.site-richtext li {
+  margin-bottom: 0.4rem;
+}
+.site-richtext strong {
+  font-weight: 600;
+}
+
+/* Same typography, scoped for the admin's live richtext editing surface. */
+.admin-richtext-editable {
+  font-size: 13px;
+  color: var(--md-on-surface);
+  line-height: 1.7;
+}
+.admin-richtext-editable p {
+  margin: 0 0 0.75rem;
+}
+.admin-richtext-editable h2 {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 1rem 0 0.5rem;
+}
+.admin-richtext-editable h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0.75rem 0 0.4rem;
+}
+.admin-richtext-editable img {
+  max-width: 100%;
+  border-radius: 8px;
+  margin: 0.5rem 0;
+  display: block;
+}
+.admin-richtext-editable ul,
+.admin-richtext-editable ol {
+  margin: 0 0 0.75rem;
+  padding-left: 1.1rem;
+}
+
+.site-reveal {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.6s ease, transform 0.6s ease;
+}
+.site-reveal.site-reveal-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+@media (prefers-reduced-motion: reduce) {
+  .site-reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}

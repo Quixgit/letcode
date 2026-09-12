@@ -1,0 +1,5 @@
+ALTER TABLE apps ADD COLUMN rating NUMERIC(2,1);
+ALTER TABLE apps ADD COLUMN rating_count INT;
+ALTER TABLE apps ADD COLUMN hero_image_media_id UUID REFERENCES media(id);
+ALTER TABLE apps ADD COLUMN feature_sections JSONB NOT NULL DEFAULT '[]';
+ALTER TABLE apps ADD COLUMN use_case_tabs JSONB NOT NULL DEFAULT '[]';
