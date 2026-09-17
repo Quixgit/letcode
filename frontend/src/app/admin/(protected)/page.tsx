@@ -75,54 +75,26 @@ export default function DashboardPage() {
         </div>
 
         <Card elevation={1} className="mb-4 p-4">
-          <div className="mb-3 flex gap-6">
-            <div>
-              <p className="md-display-small m-0 text-md-on-surface">{analytics?.total_views ?? 0}</p>
-              <p className="md-body-small m-0 text-md-on-surface-variant">просмотров</p>
-            </div>
-            <div>
-              <p className="md-display-small m-0 text-md-on-surface">{analytics?.unique_paths ?? 0}</p>
-              <p className="md-body-small m-0 text-md-on-surface-variant">уникальных страниц</p>
-            </div>
+          <div className="mb-4 flex flex-wrap gap-8">
+            <TrafficStat icon="ti-eye" label="просмотров" value={analytics?.total_views ?? 0} delta={computeDelta(analytics)} />
+            <TrafficStat icon="ti-files" label="уникальных страниц" value={analytics?.unique_paths ?? 0} />
+            <TrafficStat icon="ti-calendar-event" label="сегодня" value={analytics?.views_today ?? 0} />
           </div>
           <LineChart data={analytics?.views_by_day ?? []} />
         </Card>
 
-        <div className="grid grid-cols-2 gap-4">
-          <Card elevation={1} className="overflow-hidden">
-            <p className="md-title-small m-0 border-b border-md-outline-variant px-4 py-3 text-md-on-surface-variant">
-              Топ страниц
-            </p>
-            {(analytics?.top_pages ?? []).map((p) => (
-              <div
-                key={p.path}
-                className="flex items-center justify-between border-b border-md-outline-variant px-4 py-2 md-body-medium last:border-0"
-              >
-                <span className="truncate text-md-on-surface">{p.path}</span>
-                <span className="shrink-0 text-md-on-surface-variant">{p.views}</span>
-              </div>
-            ))}
-            {(analytics?.top_pages?.length ?? 0) === 0 && (
-              <p className="md-body-medium px-4 py-3 text-md-on-surface-variant">Пока нет данных.</p>
-            )}
-          </Card>
-          <Card elevation={1} className="overflow-hidden">
-            <p className="md-title-small m-0 border-b border-md-outline-variant px-4 py-3 text-md-on-surface-variant">
-              Источники трафика
-            </p>
-            {(analytics?.top_referrers ?? []).map((r) => (
-              <div
-                key={r.referrer}
-                className="flex items-center justify-between border-b border-md-outline-variant px-4 py-2 md-body-medium last:border-0"
-              >
-                <span className="truncate text-md-on-surface">{r.referrer}</span>
-                <span className="shrink-0 text-md-on-surface-variant">{r.views}</span>
-              </div>
-            ))}
-            {(analytics?.top_referrers?.length ?? 0) === 0 && (
-              <p className="md-body-medium px-4 py-3 text-md-on-surface-variant">Пока нет данных.</p>
-            )}
-          </Card>
+        <div className="grid grid-cols-3 gap-4">
+          <RankedListCard title="Топ страниц" icon="ti-file-text" rows={(analytics?.top_pages ?? []).map((p) => ({ key: p.path, label: p.path, views: p.views }))} />
+          <RankedListCard
+            title="Источники трафика"
+            icon="ti-external-link"
+            rows={(analytics?.top_referrers ?? []).map((r) => ({ key: r.referrer, label: formatReferrer(r.referrer), views: r.views }))}
+          />
+          <RankedListCard
+            title="Устройства"
+            icon="ti-devices"
+            rows={(analytics?.devices ?? []).map((d) => ({ key: d.device, label: deviceLabel(d.device), views: d.views, icon: deviceIcon(d.device) }))}
+          />
         </div>
       </div>
 
@@ -154,6 +126,9 @@ export default function DashboardPage() {
       <div>
         <h2 className="md-title-medium mb-2 text-md-on-surface">SEO</h2>
         <Card elevation={1} className="flex gap-4 px-4 py-3 md-body-medium">
+          <Link href="/admin/seo" className="text-md-on-surface hover:underline">
+            Настройки SEO →
+          </Link>
           <a
             href="https://lecode.tech/sitemap.xml"
             target="_blank"
@@ -196,9 +171,9 @@ function SummaryCard({
   href: string;
 }) {
   return (
-    <Card elevation={1} className="p-5">
+    <Card elevation={1} outlined className="p-4">
       <Link href={href} className="block">
-        <p className="md-display-small m-0 text-md-on-surface">{total}</p>
+        <p className="md-display-small m-0 text-md-accent">{total}</p>
         <p className="md-body-medium m-0 mb-2 text-md-on-surface-variant">{title}</p>
       </Link>
       <p className="md-body-small m-0 flex flex-wrap gap-x-1 text-md-on-surface-variant">
@@ -214,6 +189,109 @@ function SummaryCard({
           {counts.archived} архив
         </Link>
       </p>
+    </Card>
+  );
+}
+
+function computeDelta(analytics: AnalyticsSummary | undefined): number | null {
+  // No prior-period baseline to compare against (brand new site, or the whole previous window
+  // had zero traffic) — a bare percentage would be misleading (0 → 1 view reads as "+∞%").
+  if (!analytics || analytics.prev_views === 0) return null;
+  return ((analytics.total_views - analytics.prev_views) / analytics.prev_views) * 100;
+}
+
+function formatReferrer(referrer: string): string {
+  try {
+    return new URL(referrer).hostname.replace(/^www\./, "");
+  } catch {
+    return referrer;
+  }
+}
+
+const DEVICE_LABELS: Record<string, string> = {
+  desktop: "Десктоп",
+  mobile: "Мобильные",
+  tablet: "Планшеты",
+  bot: "Боты / краулеры",
+  unknown: "Неизвестно",
+};
+const DEVICE_ICONS: Record<string, string> = {
+  desktop: "ti-device-desktop",
+  mobile: "ti-device-mobile",
+  tablet: "ti-device-tablet",
+  bot: "ti-robot",
+  unknown: "ti-help-circle",
+};
+function deviceLabel(device: string): string {
+  return DEVICE_LABELS[device] || device;
+}
+function deviceIcon(device: string): string {
+  return DEVICE_ICONS[device] || "ti-device-unknown";
+}
+
+function TrafficStat({ icon, label, value, delta }: { icon: string; label: string; value: number; delta?: number | null }) {
+  return (
+    <div className="flex items-start gap-3">
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-md-secondary-container text-md-on-secondary-container">
+        <i className={`ti ${icon} text-base`} />
+      </div>
+      <div>
+        <div className="flex items-baseline gap-2">
+          <p className="md-display-small m-0 text-md-on-surface">{value}</p>
+          {delta !== undefined && delta !== null && (
+            <span
+              className={`md-label-small flex items-center gap-0.5 rounded-full px-1.5 py-0.5 ${
+                delta > 0
+                  ? "bg-md-tertiary-container text-md-on-tertiary-container"
+                  : delta < 0
+                    ? "bg-md-error-container text-md-on-error-container"
+                    : "text-md-on-surface-variant"
+              }`}
+            >
+              <i className={`ti ${delta > 0 ? "ti-trending-up" : delta < 0 ? "ti-trending-down" : "ti-minus"} text-xs`} />
+              {delta > 0 ? "+" : ""}
+              {delta.toFixed(0)}%
+            </span>
+          )}
+        </div>
+        <p className="md-body-small m-0 text-md-on-surface-variant">{label}</p>
+      </div>
+    </div>
+  );
+}
+
+function RankedListCard({
+  title,
+  icon,
+  rows,
+}: {
+  title: string;
+  icon: string;
+  rows: { key: string; label: string; views: number; icon?: string }[];
+}) {
+  const max = Math.max(1, ...rows.map((r) => r.views));
+  return (
+    <Card elevation={1} className="overflow-hidden">
+      <p className="md-title-small m-0 flex items-center gap-2 border-b border-md-outline-variant px-4 py-3 text-md-on-surface-variant">
+        <i className={`ti ${icon} text-base`} />
+        {title}
+      </p>
+      {rows.map((r) => (
+        <div key={r.key} className="relative border-b border-md-outline-variant px-4 py-2 last:border-0">
+          <div
+            className="absolute inset-y-0 left-0 bg-md-secondary-container/40"
+            style={{ width: `${Math.round((r.views / max) * 100)}%` }}
+          />
+          <div className="relative flex items-center justify-between gap-3 md-body-medium">
+            <span className="flex min-w-0 items-center gap-1.5 truncate text-md-on-surface">
+              {r.icon && <i className={`ti ${r.icon} shrink-0 text-sm text-md-on-surface-variant`} />}
+              <span className="truncate">{r.label}</span>
+            </span>
+            <span className="shrink-0 text-md-on-surface-variant">{r.views}</span>
+          </div>
+        </div>
+      ))}
+      {rows.length === 0 && <p className="md-body-medium px-4 py-3 text-md-on-surface-variant">Пока нет данных.</p>}
     </Card>
   );
 }

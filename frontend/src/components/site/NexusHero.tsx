@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SITE_CONTENT_WIDTH } from "@/components/site/PageContainer";
 
 function RingGraphic() {
   const rings = [90, 70, 50];
@@ -22,7 +23,7 @@ function RingGraphic() {
 
 export function NexusHero() {
   return (
-    <section style={{ padding: "4rem 2rem 4rem", maxWidth: 1000, margin: "0 auto" }}>
+    <section style={{ padding: "4rem 2rem 4rem", maxWidth: SITE_CONTENT_WIDTH, margin: "0 auto" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 48, flexWrap: "wrap", justifyContent: "center" }}>
         <RingGraphic />
         <div style={{ maxWidth: 460 }}>

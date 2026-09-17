@@ -1,7 +1,9 @@
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { getPublicSettings, getPublicNavItems, getActiveTemplate, getPublicBlogPosts } from "@/lib/api";
 import type { NavItem } from "@/lib/api";
 import { NavMenu } from "@/components/site/NavMenu";
+import { HeaderChrome } from "@/components/site/HeaderChrome";
 
 const isAppsUrl = (url: string) => url.startsWith("/apps") || url.startsWith("/#apps");
 const isBlogUrl = (url: string) => url.startsWith("/blog");
@@ -52,52 +54,43 @@ export async function Header() {
   const effectiveNavItems = applySiteModeToHeaderNav(navItems, siteMode, blogTags);
 
   const alignment = template?.header_config.menu_alignment || "right";
+  const logoPosition = template?.header_config.logo_position || "left";
   const sticky = template?.header_config.sticky ?? false;
+  const floating = sticky && template?.header_config.sticky_style === "floating";
   const showCta = template?.header_config.show_cta_button ?? false;
 
-  return (
-    <header
-      style={{
-        display: "flex",
-        alignItems: "center",
-        padding: "1.1rem 2rem",
-        borderBottom: "0.5px solid #EAE8E1",
-        background: "var(--site-page-bg, #FFFFFF)",
-        position: sticky ? "sticky" : "relative",
-        top: sticky ? 0 : undefined,
-        zIndex: 20,
-      }}
-    >
-      <Link href="/" style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none", flexShrink: 0 }}>
-        {settings.logo_url ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={settings.logo_url} alt={siteName} style={{ width: 26, height: 26, borderRadius: 7, objectFit: "cover" }} />
-        ) : (
-          <div
-            style={{
-              width: 26,
-              height: 26,
-              borderRadius: 7,
-              background: "var(--site-text, #17181C)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <i className="ti ti-terminal-2" style={{ fontSize: 14, color: "#FFFFFF" }} />
-          </div>
-        )}
-        <span style={{ fontWeight: 500, fontSize: 15, color: "var(--site-text, #17181C)" }}>{siteName}</span>
-      </Link>
+  const logo = (
+    <Link href="/" style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none", flexShrink: 0 }}>
+      {settings.logo_url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={settings.logo_url} alt={siteName} style={{ width: 26, height: 26, borderRadius: 7, objectFit: "cover" }} />
+      ) : (
+        <div
+          style={{
+            width: 26,
+            height: 26,
+            borderRadius: 7,
+            background: "var(--site-text, #17181C)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <i className="ti ti-terminal-2" style={{ fontSize: 14, color: "#FFFFFF" }} />
+        </div>
+      )}
+      <span style={{ fontWeight: 500, fontSize: 15, color: "var(--site-text, #17181C)" }}>{siteName}</span>
+    </Link>
+  );
 
+  const navAndCta = (
+    <>
       <NavMenu navItems={effectiveNavItems} alignment={alignment} />
-
       {showCta && (
         <Link
           href="/#apps"
           className="site-cta-desktop"
           style={{
-            marginLeft: alignment === "right" ? 20 : alignment === "center" ? 0 : "auto",
             flexShrink: 0,
             padding: "8px 16px",
             borderRadius: 8,
@@ -111,6 +104,31 @@ export async function Header() {
           Get started
         </Link>
       )}
-    </header>
+    </>
   );
+
+  // logo_position is only ever "left"/"right" (no "center"), so it always targets the start or
+  // end grid cell; menu_alignment can also land in the center cell. When both want the same
+  // cell, order them so the logo anchors that cell's outer edge (leftmost in "start", rightmost
+  // in "end") and the nav sits inward from it — matching the look of the single-cell default.
+  const navTarget: "start" | "center" | "end" = alignment === "center" ? "center" : alignment === "right" ? "end" : "start";
+  const logoTarget: "start" | "end" = logoPosition === "right" ? "end" : "start";
+
+  let startSlot: ReactNode = null;
+  let centerSlot: ReactNode = null;
+  let endSlot: ReactNode = null;
+
+  if (logoTarget === navTarget) {
+    const combined = logoTarget === "end" ? <>{navAndCta}{logo}</> : <>{logo}{navAndCta}</>;
+    if (logoTarget === "start") startSlot = combined;
+    else endSlot = combined;
+  } else {
+    if (logoTarget === "start") startSlot = logo;
+    else endSlot = logo;
+    if (navTarget === "start") startSlot = navAndCta;
+    else if (navTarget === "center") centerSlot = navAndCta;
+    else endSlot = navAndCta;
+  }
+
+  return <HeaderChrome sticky={sticky} floating={floating} start={startSlot} center={centerSlot} end={endSlot} />;
 }

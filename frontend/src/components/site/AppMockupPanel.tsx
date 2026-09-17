@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useState } from "react";
+import { PageContainer } from "@/components/site/PageContainer";
 import { smoothLinePath, toChartCoords } from "@/lib/svg-path";
 import { SmoothStatChart } from "@/components/site/SmoothStatChart";
 
@@ -170,6 +171,151 @@ function DashboardMockup({ dark }: { dark?: boolean }) {
   );
 }
 
+type StatusItem = { icon?: string; title: string; subtitle?: string; status_text?: string };
+type StatusColor = "success" | "neutral" | "warning";
+
+const STATUS_TONES: Record<StatusColor, { bg: string; text: string; dot: string }> = {
+  success: { bg: "rgba(34, 197, 94, 0.12)", text: "#15803D", dot: "#22C55E" },
+  neutral: { bg: "rgba(113, 113, 122, 0.12)", text: "#52525B", dot: "#71717A" },
+  warning: { bg: "rgba(217, 119, 6, 0.12)", text: "#B45309", dot: "#D97706" },
+};
+
+function StatusPill({ label, color = "success" }: { label: string; color?: StatusColor }) {
+  const tone = STATUS_TONES[color];
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        padding: "4px 10px",
+        borderRadius: 999,
+        background: tone.bg,
+        color: tone.text,
+        fontSize: 11.5,
+        fontWeight: 600,
+        whiteSpace: "nowrap",
+        flexShrink: 0,
+      }}
+    >
+      <span style={{ width: 6, height: 6, borderRadius: "50%", background: tone.dot }} />
+      {label}
+    </span>
+  );
+}
+
+// Unlike the other mockups (all hardcoded decorative fills — they're just illustrating "an app
+// screenshot"), this one renders real admin-entered content, so it owns the whole panel body
+// (header + rows + footer) instead of slotting into the generic title/description layout the
+// other mockup types share — its header needs a status pill next to the title, not a
+// description line under it.
+function StatusListPanel({
+  title,
+  statusLabel,
+  items,
+  footerText,
+  dark,
+}: {
+  title: string;
+  statusLabel?: string;
+  items?: StatusItem[];
+  footerText?: string;
+  dark?: boolean;
+}) {
+  const iconBg = dark ? "rgba(255,255,255,0.12)" : "#3A3F4B";
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 20 }}>
+        <p style={{ fontSize: 16, fontWeight: 700, color: dark ? "#FFFFFF" : "var(--site-text, #17181C)", margin: 0 }}>{title}</p>
+        {statusLabel && <StatusPill label={statusLabel} />}
+      </div>
+
+      {items && items.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {items.map((item, i) => (
+            <div
+              key={i}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+                background: dark ? "rgba(255,255,255,0.06)" : "var(--site-card-bg, #F7F6F2)",
+                borderRadius: 10,
+                padding: "10px 12px",
+              }}
+            >
+              <span
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: 30,
+                  height: 30,
+                  borderRadius: 8,
+                  background: iconBg,
+                  flexShrink: 0,
+                }}
+              >
+                <i className={`ti ${item.icon || "ti-circle-check"}`} style={{ fontSize: 15, color: "#FFFFFF" }} />
+              </span>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <p style={{ fontSize: 13.5, fontWeight: 600, color: dark ? "#FFFFFF" : "var(--site-text, #17181C)", margin: 0 }}>
+                  {item.title}
+                </p>
+                {item.subtitle && (
+                  <p
+                    style={{
+                      fontFamily: "var(--font-geist-mono), ui-monospace, monospace",
+                      fontSize: 11,
+                      color: dark ? "rgba(255,255,255,0.55)" : "var(--site-text-muted, #8A8C93)",
+                      margin: "2px 0 0",
+                    }}
+                  >
+                    {item.subtitle}
+                  </p>
+                )}
+              </div>
+              {item.status_text && <StatusPill label={item.status_text} />}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {footerText && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            marginTop: 20,
+            paddingTop: 16,
+            borderTop: `1px solid ${dark ? "rgba(255,255,255,0.12)" : "#EAE8E1"}`,
+          }}
+        >
+          <span
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 18,
+              height: 18,
+              borderRadius: "50%",
+              background: "#22C55E",
+              flexShrink: 0,
+            }}
+          >
+            <i className="ti ti-check" style={{ fontSize: 12, color: "#FFFFFF" }} />
+          </span>
+          <p style={{ fontSize: 12.5, color: dark ? "rgba(255,255,255,0.8)" : "var(--site-text, #17181C)", margin: 0 }}>
+            {footerText}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Mockup({ type, dark }: { type: "list" | "chart" | "toggles" | "dashboard"; dark?: boolean }) {
   if (type === "chart") return <ChartMockup dark={dark} />;
   if (type === "toggles") return <TogglesMockup dark={dark} />;
@@ -177,13 +323,25 @@ function Mockup({ type, dark }: { type: "list" | "chart" | "toggles" | "dashboar
   return <ListMockup dark={dark} />;
 }
 
-export function AppMockupPanel({
-  panels,
-  compact,
-}: {
-  panels: { title: string; description: string; mockup: "list" | "chart" | "toggles" | "dashboard"; dark?: boolean }[];
+interface AppMockupPanelProps {
+  panels: {
+    title: string;
+    description: string;
+    mockup: "list" | "chart" | "toggles" | "dashboard" | "status_list";
+    status_label?: string;
+    status_color?: StatusColor;
+    items?: StatusItem[];
+    footer_text?: string;
+    dark?: boolean;
+  }[];
   compact?: boolean;
-}) {
+  /** False when this block is nested inside a `columns` block, whose own cell already bounds
+   * its width — without this, the panel would additionally wrap itself in `PageContainer`
+   * (max-width + its own side padding), visibly narrowing the card inside its own column. */
+  contained?: boolean;
+}
+
+export function AppMockupPanel({ panels, compact, contained = true }: AppMockupPanelProps) {
   const [page, setPage] = useState(0);
   const perPage = compact ? 3 : 2;
   const pages = Math.ceil(panels.length / perPage);
@@ -191,71 +349,101 @@ export function AppMockupPanel({
 
   if (panels.length === 0) return null;
 
-  return (
-    <section style={{ padding: "0 2rem 4rem", maxWidth: 960, margin: "0 auto" }}>
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: `repeat(auto-fit, minmax(${compact ? 200 : 280}px, 1fr))`,
-          gap: 20,
-        }}
-      >
-        {visible.map((panel, i) => (
-          <div
-            key={i}
-            className={panel.dark ? undefined : "site-hover-card"}
-            style={{
-              background: panel.dark ? "#17181C" : "#FFFFFF",
-              border: panel.dark ? "none" : "0.5px solid #EAE8E1",
-              borderRadius: 16,
-              padding: compact ? "1.25rem" : "1.75rem",
-            }}
-          >
-            <p
-              style={{
-                fontSize: compact ? 14 : 16,
-                fontWeight: 500,
-                color: panel.dark ? "#FFFFFF" : "var(--site-text, #17181C)",
-                margin: "0 0 6px",
-              }}
-            >
-              {panel.title}
-            </p>
-            <p
-              style={{
-                fontSize: 12,
-                color: panel.dark ? "rgba(255,255,255,0.6)" : "var(--site-text-muted, #8A8C93)",
-                margin: "0 0 16px",
-                lineHeight: 1.5,
-              }}
-            >
-              {panel.description}
-            </p>
-            <Mockup type={panel.mockup} dark={panel.dark} />
-          </div>
-        ))}
-      </div>
-
-      {pages > 1 && (
-        <div style={{ display: "flex", justifyContent: "center", gap: 6, marginTop: 24 }}>
-          {Array.from({ length: pages }).map((_, i) => (
-            <button
-              key={i}
-              onClick={() => setPage(i)}
-              aria-label={`Page ${i + 1}`}
-              style={{
-                width: 7,
-                height: 7,
-                borderRadius: "50%",
-                border: "none",
-                padding: 0,
-                background: i === page ? "var(--site-accent, #17181C)" : "#EAE8E1",
-                cursor: "pointer",
-              }}
+  const grid = (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: `repeat(auto-fit, minmax(${compact ? 200 : 280}px, 1fr))`,
+        gap: 20,
+      }}
+    >
+      {visible.map((panel, i) => (
+        <div
+          key={i}
+          className={panel.dark ? undefined : "site-hover-card"}
+          style={{
+            width: "100%",
+            boxSizing: "border-box",
+            background: panel.dark ? "#17181C" : "#FFFFFF",
+            border: panel.dark ? "none" : "0.5px solid #EAE8E1",
+            borderRadius: 16,
+            padding: compact ? "1.25rem" : "1.75rem",
+          }}
+        >
+          {panel.mockup === "status_list" ? (
+            <StatusListPanel
+              title={panel.title}
+              statusLabel={panel.status_label}
+              items={panel.items}
+              footerText={panel.footer_text}
+              dark={panel.dark}
             />
-          ))}
+          ) : (
+            <>
+              <p
+                style={{
+                  fontSize: compact ? 14 : 16,
+                  fontWeight: 500,
+                  color: panel.dark ? "#FFFFFF" : "var(--site-text, #17181C)",
+                  margin: "0 0 6px",
+                }}
+              >
+                {panel.title}
+              </p>
+              <p
+                style={{
+                  fontSize: 12,
+                  color: panel.dark ? "rgba(255,255,255,0.6)" : "var(--site-text-muted, #8A8C93)",
+                  margin: "0 0 16px",
+                  lineHeight: 1.5,
+                }}
+              >
+                {panel.description}
+              </p>
+              <Mockup type={panel.mockup} dark={panel.dark} />
+            </>
+          )}
         </div>
-      )}
+      ))}
+    </div>
+  );
+
+  const pagerDots = pages > 1 && (
+    <div style={{ display: "flex", justifyContent: "center", gap: 6, marginTop: 24 }}>
+      {Array.from({ length: pages }).map((_, i) => (
+        <button
+          key={i}
+          onClick={() => setPage(i)}
+          aria-label={`Page ${i + 1}`}
+          style={{
+            width: 7,
+            height: 7,
+            borderRadius: "50%",
+            border: "none",
+            padding: 0,
+            background: i === page ? "var(--site-accent, #17181C)" : "#EAE8E1",
+            cursor: "pointer",
+          }}
+        />
+      ))}
+    </div>
+  );
+
+  if (!contained) {
+    return (
+      <>
+        {grid}
+        {pagerDots}
+      </>
+    );
+  }
+
+  return (
+    <section style={{ padding: "0 0 4rem" }}>
+      <PageContainer>
+        {grid}
+        {pagerDots}
+      </PageContainer>
     </section>
   );
 }

@@ -90,12 +90,21 @@ function TabItemRow({
         onChange={(mediaId, url) => onChange({ ...item, icon_media_id: mediaId, icon_url: url })}
       />
       <div className="flex flex-1 flex-col gap-1.5">
-        <input
-          value={item.title}
-          onChange={(e) => onChange({ ...item, title: e.target.value })}
-          placeholder="Заголовок"
-          className={inputClass}
-        />
+        <div className="flex gap-1.5">
+          <input
+            value={item.title}
+            onChange={(e) => onChange({ ...item, title: e.target.value })}
+            placeholder="Заголовок"
+            className={inputClass}
+          />
+          <input
+            value={item.icon || ""}
+            onChange={(e) => onChange({ ...item, icon: e.target.value })}
+            placeholder="ti-rocket"
+            title="Класс иконки (tabler), например ti-rocket — используется вместо картинки, если задан"
+            className={`${inputClass} w-28 shrink-0`}
+          />
+        </div>
         <input
           value={item.description || ""}
           onChange={(e) => onChange({ ...item, description: e.target.value })}
@@ -238,6 +247,11 @@ function PreviewPanel({ content }: { content: NavMenuContent }) {
             <p className="m-0 mb-2 text-[11px] font-medium uppercase tracking-wide" style={{ color: "#8A8C93" }}>
               {content.side_panel.title || "Side panel"}
             </p>
+            {content.side_panel.text && (
+              <p className="m-0 mb-2 text-[11.5px] leading-snug" style={{ color: "#8A8C93" }}>
+                {content.side_panel.text}
+              </p>
+            )}
             <div className="flex flex-col gap-1.5">
               {content.side_panel.items.map((item, i) => (
                 <div key={i} className="flex items-center gap-1.5 text-[12px]" style={{ color: "#17181C" }}>
@@ -446,6 +460,13 @@ export function MegaMenuEditor({ menuType, initial, onClose, onSave }: MegaMenuE
                     value={content.side_panel.title}
                     onChange={(e) => updateSidePanel({ title: e.target.value })}
                     placeholder="Заголовок колонки"
+                    className={inputClass}
+                  />
+                  <textarea
+                    value={content.side_panel.text || ""}
+                    onChange={(e) => updateSidePanel({ text: e.target.value })}
+                    placeholder="Короткий поясняющий текст (опционально)"
+                    rows={2}
                     className={inputClass}
                   />
                   <div className="flex items-center gap-3 text-[12px] text-md-on-surface-variant">

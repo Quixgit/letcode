@@ -55,12 +55,20 @@ type referrerCount struct {
 	Views    int64  `json:"views"`
 }
 
+type deviceCount struct {
+	Device string `json:"device"`
+	Views  int64  `json:"views"`
+}
+
 type analyticsSummary struct {
 	TotalViews   int64           `json:"total_views"`
 	UniquePaths  int64           `json:"unique_paths"`
+	ViewsToday   int64           `json:"views_today"`
+	PrevViews    int64           `json:"prev_views"`   // same-length window immediately before the selected period, for a period-over-period delta
 	TopPages     []pathCount     `json:"top_pages"`
 	TopReferrers []referrerCount `json:"top_referrers"`
 	ViewsByDay   []dayCount      `json:"views_by_day"`
+	Devices      []deviceCount   `json:"devices"`
 }
 
 func (h *AnalyticsHandler) Summary(c echo.Context) error {
@@ -79,6 +87,22 @@ func (h *AnalyticsHandler) Summary(c echo.Context) error {
 		`SELECT COUNT(*), COUNT(DISTINCT path) FROM page_views WHERE created_at >= $1`,
 		since,
 	).Scan(&summary.TotalViews, &summary.UniquePaths); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "query_failed"})
+	}
+
+	if err := h.Pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM page_views WHERE created_at >= date_trunc('day', now())`,
+	).Scan(&summary.ViewsToday); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "query_failed"})
+	}
+
+	// Previous period of the same length, immediately before `since` — lets the dashboard show
+	// a "+N% vs previous period" delta instead of a bare, context-free total.
+	prevSince := since.AddDate(0, 0, -days)
+	if err := h.Pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM page_views WHERE created_at >= $1 AND created_at < $2`,
+		prevSince, since,
+	).Scan(&summary.PrevViews); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "query_failed"})
 	}
 
@@ -140,6 +164,36 @@ func (h *AnalyticsHandler) Summary(c echo.Context) error {
 		}
 	}
 	dayRows.Close()
+
+	// Device/bot breakdown, classified from the User-Agent string already stored per view —
+	// no extra tracking or client-side fingerprinting needed for this one.
+	deviceRows, err := h.Pool.Query(ctx,
+		`SELECT
+		   CASE
+		     WHEN user_agent ILIKE '%bot%' OR user_agent ILIKE '%crawl%' OR user_agent ILIKE '%spider%'
+		       OR user_agent ILIKE '%claude%' OR user_agent ILIKE '%gptbot%' OR user_agent ILIKE '%perplexity%'
+		       THEN 'bot'
+		     WHEN user_agent ILIKE '%ipad%' OR user_agent ILIKE '%tablet%' THEN 'tablet'
+		     WHEN user_agent ILIKE '%mobi%' OR (user_agent ILIKE '%android%' AND user_agent NOT ILIKE '%tablet%') THEN 'mobile'
+		     WHEN user_agent IS NULL THEN 'unknown'
+		     ELSE 'desktop'
+		   END AS device,
+		   COUNT(*) AS views
+		 FROM page_views WHERE created_at >= $1
+		 GROUP BY device ORDER BY views DESC`,
+		since,
+	)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "query_failed"})
+	}
+	summary.Devices = []deviceCount{}
+	for deviceRows.Next() {
+		var d deviceCount
+		if err := deviceRows.Scan(&d.Device, &d.Views); err == nil {
+			summary.Devices = append(summary.Devices, d)
+		}
+	}
+	deviceRows.Close()
 
 	return c.JSON(http.StatusOK, summary)
 }

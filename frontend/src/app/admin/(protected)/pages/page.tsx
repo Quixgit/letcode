@@ -15,6 +15,7 @@ import { EmptyState } from "@/components/admin/m3/EmptyState";
 import { ConfirmDialog } from "@/components/admin/ConfirmDialog";
 import { QuickEditRow } from "@/components/admin/QuickEditRow";
 import { FilterBar, FilterField, FilterInput } from "@/components/admin/FilterBar";
+import { ReviewBadge } from "@/components/admin/ReviewBadge";
 import type { ContentStatus, PageListItem } from "@/lib/admin-types";
 
 interface DateFilter {
@@ -30,15 +31,20 @@ function withinRange(dateStr: string, filter: DateFilter): boolean {
   return true;
 }
 
-const TABS: { label: string; value: ContentStatus | "all" }[] = [
+type TabValue = ContentStatus | "all" | "trash";
+
+const TABS: { label: string; value: TabValue }[] = [
   { label: "Все", value: "all" },
   { label: "Опубликовано", value: "published" },
   { label: "Черновики", value: "draft" },
   { label: "Архив", value: "archived" },
+  { label: "Корзина", value: "trash" },
 ];
 
-function initialTab(statusParam: string | null): ContentStatus | "all" {
-  return statusParam === "published" || statusParam === "draft" || statusParam === "archived" ? statusParam : "all";
+function initialTab(statusParam: string | null): TabValue {
+  return statusParam === "published" || statusParam === "draft" || statusParam === "archived" || statusParam === "trash"
+    ? statusParam
+    : "all";
 }
 
 export default function PagesListPage() {
@@ -54,9 +60,10 @@ function PagesListPageInner() {
   const queryClient = useQueryClient();
   const { showToast } = useToast();
   const searchParams = useSearchParams();
-  const [tab, setTab] = useState<ContentStatus | "all">(() => initialTab(searchParams.get("status")));
+  const [tab, setTab] = useState<TabValue>(() => initialTab(searchParams.get("status")));
   const [selected, setSelected] = useState<string[]>([]);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  const [pendingPermanentDelete, setPendingPermanentDelete] = useState<PageListItem | null>(null);
   const [quickEditId, setQuickEditId] = useState<string | null>(null);
   const [dateDraft, setDateDraft] = useState<DateFilter>(EMPTY_DATE_FILTER);
   const [dateFilter, setDateFilter] = useState<DateFilter>(EMPTY_DATE_FILTER);
@@ -99,7 +106,26 @@ function PagesListPageInner() {
     onSuccess: () => {
       invalidate();
       setConfirmBulkDelete(false);
-      showToast("Удалено");
+      showToast("Перемещено в корзину");
+    },
+    onError: (err: Error) => showToast(err.message, "error"),
+  });
+
+  const restoreMutation = useMutation({
+    mutationFn: (id: string) => adminFetch(`api/pages/${id}/restore`, { method: "POST" }),
+    onSuccess: () => {
+      invalidate();
+      showToast("Восстановлено");
+    },
+    onError: (err: Error) => showToast(err.message, "error"),
+  });
+
+  const permanentDeleteMutation = useMutation({
+    mutationFn: (id: string) => adminFetch(`api/pages/${id}/permanent`, { method: "DELETE" }),
+    onSuccess: () => {
+      invalidate();
+      setPendingPermanentDelete(null);
+      showToast("Удалено безвозвратно");
     },
     onError: (err: Error) => showToast(err.message, "error"),
   });
@@ -156,16 +182,20 @@ function PagesListPageInner() {
       {pages.length === 0 && !isLoading && hasActiveFilters ? (
         <p className="md-body-medium text-md-on-surface-variant">Ничего не найдено по текущим фильтрам.</p>
       ) : pages.length === 0 && !isLoading ? (
-        <EmptyState
-          icon="ti-file-text"
-          title="Страниц пока нет"
-          description="Статичные страницы вроде About, Contact или Privacy Policy редактируются здесь блочным редактором и выбором шаблона."
-          actionLabel={canEdit ? "+ Новая страница" : undefined}
-          actionHref={canEdit ? "/admin/pages/new" : undefined}
-        />
+        tab === "trash" ? (
+          <EmptyState icon="ti-trash" title="Корзина пуста" description="Удалённые страницы появятся здесь." />
+        ) : (
+          <EmptyState
+            icon="ti-file-text"
+            title="Страниц пока нет"
+            description="Статичные страницы вроде About, Contact или Privacy Policy редактируются здесь блочным редактором и выбором шаблона."
+            actionLabel={canEdit ? "+ Новая страница" : undefined}
+            actionHref={canEdit ? "/admin/pages/new" : undefined}
+          />
+        )
       ) : (
         <Card elevation={1} className="overflow-hidden">
-          {canEdit && pages.length > 0 && (
+          {canEdit && pages.length > 0 && tab !== "trash" && (
             <div className="flex items-center gap-3 border-b border-md-outline-variant px-4 py-2">
               <input
                 type="checkbox"
@@ -176,7 +206,34 @@ function PagesListPageInner() {
             </div>
           )}
           {pages.map((page) =>
-            quickEditId === page.id ? (
+            tab === "trash" ? (
+              <div
+                key={page.id}
+                className="flex items-center gap-3 border-b border-md-outline-variant px-4 py-3 last:border-0"
+              >
+                <div className="flex-1">
+                  <p className="md-body-medium m-0 text-md-on-surface">{page.title}</p>
+                  <p className="md-body-small m-0 text-md-on-surface-variant">/{page.slug}</p>
+                </div>
+                {canEdit && (
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => restoreMutation.mutate(page.id)}
+                      className="md-body-small text-md-primary hover:underline"
+                    >
+                      Восстановить
+                    </button>
+                    <button
+                      onClick={() => setPendingPermanentDelete(page)}
+                      className="text-md-on-surface-variant hover:text-md-error"
+                      title="Удалить навсегда"
+                    >
+                      <i className="ti ti-trash-x text-sm" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : quickEditId === page.id ? (
               <QuickEditRow
                 key={page.id}
                 title={page.title}
@@ -216,6 +273,7 @@ function PagesListPageInner() {
                     <span className="md-body-small text-md-on-surface-variant">
                       {page.updated_at ? new Date(page.updated_at).toLocaleDateString("ru-RU") : ""}
                     </span>
+                    <ReviewBadge status={page.review_status} />
                     <StatusBadge status={page.status} />
                   </div>
                 </Link>
@@ -227,10 +285,18 @@ function PagesListPageInner() {
 
       <ConfirmDialog
         open={confirmBulkDelete}
-        title={`Удалить ${selected.length} страниц${selected.length === 1 ? "у" : "ы"}?`}
+        title={`Переместить в корзину ${selected.length} страниц${selected.length === 1 ? "у" : "ы"}?`}
         confirmLabel="Удалить"
         onConfirm={() => bulkDeleteMutation.mutate(selected)}
         onCancel={() => setConfirmBulkDelete(false)}
+      />
+      <ConfirmDialog
+        open={!!pendingPermanentDelete}
+        title={`Удалить «${pendingPermanentDelete?.title}» безвозвратно?`}
+        description="Это действие нельзя отменить."
+        confirmLabel="Удалить навсегда"
+        onConfirm={() => pendingPermanentDelete && permanentDeleteMutation.mutate(pendingPermanentDelete.id)}
+        onCancel={() => setPendingPermanentDelete(null)}
       />
     </div>
   );

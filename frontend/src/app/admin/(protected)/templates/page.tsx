@@ -67,14 +67,36 @@ function TemplateConfigForm({ template, onSaved }: { template: SiteTemplateItem;
         <SegmentedButton
           segments={[
             { value: "left", label: "Слева" },
-            { value: "center", label: "По центру" },
+            { value: "right", label: "Справа" },
           ]}
           value={headerConfig.logo_position || "left"}
           onChange={(v) => setHeaderConfig({ ...headerConfig, logo_position: v })}
         />
       </div>
 
-      <Switch checked={!!headerConfig.sticky} onChange={(v) => setHeaderConfig({ ...headerConfig, sticky: v })} label="Sticky-хедер" />
+      <div>
+        <p className="md-body-small mb-1.5 text-md-on-surface-variant">Header — поведение при скролле</p>
+        <SegmentedButton
+          segments={[
+            { value: "static", label: "Обычный" },
+            { value: "fixed", label: "Зафиксирован" },
+            { value: "floating", label: "Плавающий" },
+          ]}
+          value={!headerConfig.sticky ? "static" : headerConfig.sticky_style === "floating" ? "floating" : "fixed"}
+          onChange={(v) =>
+            setHeaderConfig(
+              v === "static"
+                ? { ...headerConfig, sticky: false }
+                : { ...headerConfig, sticky: true, sticky_style: v === "floating" ? "floating" : "fixed" }
+            )
+          }
+        />
+        <p className="md-body-small mt-1 text-md-on-surface-variant">
+          Обычный — уходит вместе со страницей при прокрутке. Зафиксирован — остаётся наверху без изменений. Плавающий —
+          остаётся наверху, но при прокрутке вниз становится полупрозрачным с лёгкой тенью, а у самого верха страницы — снова
+          непрозрачным без тени.
+        </p>
+      </div>
       <Switch
         checked={!!headerConfig.show_cta_button}
         onChange={(v) => setHeaderConfig({ ...headerConfig, show_cta_button: v })}
@@ -156,7 +178,7 @@ export default function TemplatesPage() {
 
       {isLoading && <p className="md-body-medium text-md-on-surface-variant">Загрузка...</p>}
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {(templates || []).map((t) => (
           <Card key={t.id} elevation={1} className="overflow-hidden">
             <button

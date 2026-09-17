@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { Testimonial } from "@/lib/api";
 import { Avatar } from "@/components/site/Avatar";
+import { PageContainer } from "@/components/site/PageContainer";
 
 export function TestimonialsCarousel({ testimonials }: { testimonials: Testimonial[] }) {
   const [index, setIndex] = useState(0);
@@ -12,7 +13,9 @@ export function TestimonialsCarousel({ testimonials }: { testimonials: Testimoni
   const go = (dir: -1 | 1) => setIndex((i) => (i + dir + testimonials.length) % testimonials.length);
 
   return (
-    <section style={{ padding: "0 2rem 4rem", maxWidth: 640, margin: "0 auto", textAlign: "center" }}>
+    <section style={{ padding: "0 0 4rem", textAlign: "center" }}>
+      <PageContainer>
+      <div style={{ maxWidth: 640, margin: "0 auto" }}>
       <h2 style={{ fontSize: 26, fontWeight: 500, color: "var(--site-text, #17181C)", margin: "0 0 2rem" }}>What people say</h2>
 
       <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
@@ -95,6 +98,8 @@ export function TestimonialsCarousel({ testimonials }: { testimonials: Testimoni
           ))}
         </div>
       )}
+      </div>
+      </PageContainer>
     </section>
   );
 }

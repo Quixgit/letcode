@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"net/http"
@@ -30,9 +31,17 @@ type userListItem struct {
 func (h *UserHandler) List(c echo.Context) error {
 	ctx, cancel := db.WithTimeout()
 	defer cancel()
+
+	// trashed=true lists soft-deleted users instead of live ones (see Delete/Restore).
+	deletedFilter := "u.deleted_at IS NULL"
+	if c.QueryParam("trashed") == "true" {
+		deletedFilter = "u.deleted_at IS NOT NULL"
+	}
+
 	rows, err := h.Pool.Query(ctx,
 		`SELECT u.id, u.email, u.name, r.name, u.is_active, u.last_login_at, u.created_at
 		 FROM users u JOIN roles r ON r.id = u.role_id
+		 WHERE `+deletedFilter+`
 		 ORDER BY u.created_at ASC`)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "query_failed"})
@@ -139,6 +148,70 @@ func (h *UserHandler) UpdateActive(c echo.Context) error {
 	_, err := h.Pool.Exec(ctx, "UPDATE users SET is_active=$1, updated_at=now() WHERE id=$2", req.IsActive, c.Param("id"))
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "update_failed"})
+	}
+	return c.NoContent(http.StatusOK)
+}
+
+// wouldRemoveLastAdmin reports whether deleting/deactivating targetID would leave the site
+// with zero active, non-deleted admins — the one thing this handler refuses unconditionally,
+// since a soft-deleted (or hard-deleted) admin's account can't undo itself.
+func (h *UserHandler) wouldRemoveLastAdmin(ctx context.Context, targetID string) (bool, error) {
+	var isTargetAdmin bool
+	if err := h.Pool.QueryRow(ctx,
+		`SELECT r.name = 'admin' FROM users u JOIN roles r ON r.id = u.role_id WHERE u.id = $1`,
+		targetID,
+	).Scan(&isTargetAdmin); err != nil {
+		return false, err
+	}
+	if !isTargetAdmin {
+		return false, nil
+	}
+
+	var otherAdmins int
+	if err := h.Pool.QueryRow(ctx,
+		`SELECT count(*) FROM users u JOIN roles r ON r.id = u.role_id
+		 WHERE r.name = 'admin' AND u.is_active = true AND u.deleted_at IS NULL AND u.id <> $1`,
+		targetID,
+	).Scan(&otherAdmins); err != nil {
+		return false, err
+	}
+	return otherAdmins == 0, nil
+}
+
+// Delete moves a user to the trash (deleted_at set) rather than removing the row — content
+// they authored (created_by/author_id columns, none of which cascade-delete) is left intact
+// and still attributed to them. Their sessions are revoked immediately so access actually ends
+// rather than lingering until their 30-day refresh token would otherwise expire.
+func (h *UserHandler) Delete(c echo.Context) error {
+	targetID := c.Param("id")
+	callerID, _ := c.Get("user_id").(string)
+	if targetID == callerID {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "cannot_delete_self"})
+	}
+
+	ctx, cancel := db.WithTimeout()
+	defer cancel()
+
+	if blocked, err := h.wouldRemoveLastAdmin(ctx, targetID); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "query_failed"})
+	} else if blocked {
+		return c.JSON(http.StatusConflict, map[string]string{"error": "cannot_delete_last_admin"})
+	}
+
+	if _, err := h.Pool.Exec(ctx, "UPDATE users SET deleted_at=now(), updated_at=now() WHERE id=$1", targetID); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "delete_failed"})
+	}
+	h.Pool.Exec(ctx, "UPDATE refresh_tokens SET revoked=true WHERE user_id=$1", targetID)
+
+	return c.NoContent(http.StatusNoContent)
+}
+
+func (h *UserHandler) Restore(c echo.Context) error {
+	ctx, cancel := db.WithTimeout()
+	defer cancel()
+	_, err := h.Pool.Exec(ctx, "UPDATE users SET deleted_at=NULL, updated_at=now() WHERE id=$1", c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "restore_failed"})
 	}
 	return c.NoContent(http.StatusOK)
 }

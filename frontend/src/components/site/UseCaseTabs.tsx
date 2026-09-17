@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { UseCaseTab } from "@/lib/api";
+import { PageContainer } from "@/components/site/PageContainer";
 
 export function UseCaseTabs({ tabs }: { tabs: UseCaseTab[] }) {
   const [active, setActive] = useState(0);
@@ -9,7 +10,8 @@ export function UseCaseTabs({ tabs }: { tabs: UseCaseTab[] }) {
   const current = tabs[active] || tabs[0];
 
   return (
-    <section style={{ padding: "0 2rem 4rem", maxWidth: 960, margin: "0 auto" }}>
+    <section style={{ padding: "0 0 4rem" }}>
+      <PageContainer>
       <div
         style={{
           display: "flex",
@@ -71,6 +73,7 @@ export function UseCaseTabs({ tabs }: { tabs: UseCaseTab[] }) {
           />
         )}
       </div>
+      </PageContainer>
     </section>
   );
 }

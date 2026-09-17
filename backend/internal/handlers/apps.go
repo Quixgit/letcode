@@ -14,7 +14,8 @@ import (
 )
 
 type AppHandler struct {
-	Pool *pgxpool.Pool
+	Pool    *pgxpool.Pool
+	BaseURL string
 }
 
 type appRequest struct {
@@ -35,6 +36,9 @@ type appRequest struct {
 	MetaTitle            *string         `json:"meta_title"`
 	MetaDescription      *string         `json:"meta_description"`
 	OGImageURL           *string         `json:"og_image_url"`
+	CanonicalURL         *string         `json:"canonical_url"`
+	NoIndex              bool            `json:"noindex"`
+	StructuredData       json.RawMessage `json:"structured_data"`
 	ScheduledPublishAt   *time.Time      `json:"scheduled_publish_at"`
 	ShowOnHomepage       bool            `json:"show_on_homepage"`
 	Rating               *float64        `json:"rating"`
@@ -51,7 +55,7 @@ func (h *AppHandler) ListPublic(c echo.Context) error {
 		`SELECT a.id, a.slug, a.name, a.category, a.icon_media_id, m.url, a.short_description, a.pricing_note, a.sort_order, a.show_on_homepage,
 		 a.google_play_url, a.app_store_url, a.website_url
 		 FROM apps a LEFT JOIN media m ON m.id = a.icon_media_id
-		 WHERE a.status='published' ORDER BY a.sort_order ASC, a.created_at ASC`)
+		 WHERE a.status='published' AND a.deleted_at IS NULL ORDER BY a.sort_order ASC, a.created_at ASC`)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "query_failed"})
 	}
@@ -88,7 +92,7 @@ func (h *AppHandler) GetBySlugPublic(c echo.Context) error {
 	defer cancel()
 	slug := c.Param("slug")
 
-	app, err := h.fetchApp(ctx, "slug=$1 AND status='published'", slug)
+	app, err := h.fetchApp(ctx, "slug=$1 AND status='published' AND deleted_at IS NULL", slug)
 	if err == pgx.ErrNoRows {
 		return c.JSON(http.StatusNotFound, map[string]string{"error": "app_not_found"})
 	}
@@ -103,11 +107,16 @@ func (h *AppHandler) List(c echo.Context) error {
 	defer cancel()
 	status := c.QueryParam("status")
 
-	query := `SELECT id, slug, name, category, status, sort_order, scheduled_publish_at, created_at, updated_at FROM apps`
+	query := `SELECT id, slug, name, category, status, sort_order, review_status, scheduled_publish_at, deleted_at, created_at, updated_at FROM apps`
 	args := []interface{}{}
-	if status != "" {
-		query += " WHERE status=$1"
-		args = append(args, status)
+	if status == "trash" {
+		query += " WHERE deleted_at IS NOT NULL"
+	} else {
+		query += " WHERE deleted_at IS NULL"
+		if status != "" {
+			query += " AND status=$1"
+			args = append(args, status)
+		}
 	}
 	query += " ORDER BY sort_order ASC"
 
@@ -124,14 +133,16 @@ func (h *AppHandler) List(c echo.Context) error {
 		Category           *string    `json:"category"`
 		Status             string     `json:"status"`
 		SortOrder          int        `json:"sort_order"`
+		ReviewStatus       string     `json:"review_status"`
 		ScheduledPublishAt *time.Time `json:"scheduled_publish_at"`
+		DeletedAt          *time.Time `json:"deleted_at"`
 		CreatedAt          time.Time  `json:"created_at"`
 		UpdatedAt          time.Time  `json:"updated_at"`
 	}
 	items := []item{}
 	for rows.Next() {
 		var i item
-		if err := rows.Scan(&i.ID, &i.Slug, &i.Name, &i.Category, &i.Status, &i.SortOrder, &i.ScheduledPublishAt, &i.CreatedAt, &i.UpdatedAt); err == nil {
+		if err := rows.Scan(&i.ID, &i.Slug, &i.Name, &i.Category, &i.Status, &i.SortOrder, &i.ReviewStatus, &i.ScheduledPublishAt, &i.DeletedAt, &i.CreatedAt, &i.UpdatedAt); err == nil {
 			items = append(items, i)
 		}
 	}
@@ -141,7 +152,7 @@ func (h *AppHandler) List(c echo.Context) error {
 func (h *AppHandler) Get(c echo.Context) error {
 	ctx, cancel := db.WithTimeout()
 	defer cancel()
-	app, err := h.fetchApp(ctx, "a.id=$1", c.Param("id"))
+	app, err := h.fetchApp(ctx, "a.id=$1 AND a.deleted_at IS NULL", c.Param("id"))
 	if err == pgx.ErrNoRows {
 		return c.JSON(http.StatusNotFound, map[string]string{"error": "app_not_found"})
 	}
@@ -156,8 +167,10 @@ func (h *AppHandler) fetchApp(ctx context.Context, whereClause string, arg strin
 		SELECT a.id, a.slug, a.name, a.category, a.icon_media_id, im.url, a.short_description, a.description, a.features,
 		 a.privacy_policy_content, a.instructions_content, a.google_play_url, a.app_store_url, a.website_url,
 		 a.pricing_note, a.status, a.sort_order, a.meta_title, a.meta_description, a.og_image_url,
+		 a.canonical_url, a.noindex, a.structured_data,
 		 a.scheduled_publish_at, a.published_at, a.created_at, a.updated_at, a.show_on_homepage,
-		 a.rating::float8, a.rating_count, a.hero_image_media_id, hm.url, a.feature_sections, a.use_case_tabs
+		 a.rating::float8, a.rating_count, a.hero_image_media_id, hm.url, a.feature_sections, a.use_case_tabs,
+		 a.review_status, a.review_note, a.deleted_at
 		FROM apps a
 		 LEFT JOIN media im ON im.id = a.icon_media_id
 		 LEFT JOIN media hm ON hm.id = a.hero_image_media_id
@@ -167,6 +180,9 @@ func (h *AppHandler) fetchApp(ctx context.Context, whereClause string, arg strin
 		id, slug, name, status                                                 string
 		category, iconMediaID, iconURL, shortDesc, desc, privacy, instructions *string
 		googlePlay, appStore, website, pricing, metaTitle, metaDesc, ogImage   *string
+		canonicalURL                                                           *string
+		noIndex                                                                bool
+		structuredData                                                        json.RawMessage
 		features                                                               json.RawMessage
 		sortOrder                                                              int
 		scheduledPublishAt                                                     *time.Time
@@ -176,12 +192,17 @@ func (h *AppHandler) fetchApp(ctx context.Context, whereClause string, arg strin
 		ratingCount                                                            *int
 		heroImageMediaID, heroImageURL                                         *string
 		featureSections, useCaseTabs                                           json.RawMessage
+		reviewStatus                                                           string
+		reviewNote                                                             *string
+		deletedAt                                                              *time.Time
 	)
 
 	err := row.Scan(&id, &slug, &name, &category, &iconMediaID, &iconURL, &shortDesc, &desc, &features,
 		&privacy, &instructions, &googlePlay, &appStore, &website, &pricing, &status, &sortOrder,
-		&metaTitle, &metaDesc, &ogImage, &scheduledPublishAt, &publishedAt, &createdAt, &updatedAt, &showOnHomepage,
-		&rating, &ratingCount, &heroImageMediaID, &heroImageURL, &featureSections, &useCaseTabs)
+		&metaTitle, &metaDesc, &ogImage, &canonicalURL, &noIndex, &structuredData,
+		&scheduledPublishAt, &publishedAt, &createdAt, &updatedAt, &showOnHomepage,
+		&rating, &ratingCount, &heroImageMediaID, &heroImageURL, &featureSections, &useCaseTabs,
+		&reviewStatus, &reviewNote, &deletedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -209,6 +230,7 @@ func (h *AppHandler) fetchApp(ctx context.Context, whereClause string, arg strin
 		"google_play_url": googlePlay, "app_store_url": appStore, "website_url": website,
 		"pricing_note": pricing, "status": status, "sort_order": sortOrder,
 		"meta_title": metaTitle, "meta_description": metaDesc, "og_image_url": ogImage,
+		"canonical_url": canonicalURL, "noindex": noIndex, "structured_data": structuredData,
 		"scheduled_publish_at": scheduledPublishAt,
 		"screenshots":          screenshots,
 		"show_on_homepage":     showOnHomepage,
@@ -218,6 +240,9 @@ func (h *AppHandler) fetchApp(ctx context.Context, whereClause string, arg strin
 		"hero_image_url":       heroImageURL,
 		"feature_sections":     featureSections,
 		"use_case_tabs":        useCaseTabs,
+		"review_status":        reviewStatus,
+		"review_note":          reviewNote,
+		"deleted_at":           deletedAt,
 	}, nil
 }
 
@@ -247,12 +272,14 @@ func (h *AppHandler) Create(c echo.Context) error {
 	err := h.Pool.QueryRow(ctx,
 		`INSERT INTO apps (slug, name, category, icon_media_id, short_description, description, features,
 		 privacy_policy_content, instructions_content, google_play_url, app_store_url, website_url,
-		 pricing_note, sort_order, meta_title, meta_description, og_image_url, scheduled_publish_at, show_on_homepage,
+		 pricing_note, sort_order, meta_title, meta_description, og_image_url, canonical_url, noindex, structured_data,
+		 scheduled_publish_at, show_on_homepage,
 		 rating, rating_count, hero_image_media_id, feature_sections, use_case_tabs, created_by, updated_by)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$25) RETURNING id`,
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$28) RETURNING id`,
 		req.Slug, req.Name, req.Category, req.IconMediaID, req.ShortDescription, req.Description, req.Features,
 		req.PrivacyPolicyContent, req.InstructionsContent, req.GooglePlayURL, req.AppStoreURL, req.WebsiteURL,
-		req.PricingNote, req.SortOrder, req.MetaTitle, req.MetaDescription, req.OGImageURL, req.ScheduledPublishAt, req.ShowOnHomepage,
+		req.PricingNote, req.SortOrder, req.MetaTitle, req.MetaDescription, req.OGImageURL, req.CanonicalURL, req.NoIndex, req.StructuredData,
+		req.ScheduledPublishAt, req.ShowOnHomepage,
 		req.Rating, req.RatingCount, req.HeroImageMediaID, req.FeatureSections, req.UseCaseTabs, userID,
 	).Scan(&id)
 
@@ -287,11 +314,13 @@ func (h *AppHandler) Update(c echo.Context) error {
 		`UPDATE apps SET slug=$1, name=$2, category=$3, icon_media_id=$4, short_description=$5, description=$6,
 		 features=$7, privacy_policy_content=$8, instructions_content=$9, google_play_url=$10, app_store_url=$11,
 		 website_url=$12, pricing_note=$13, sort_order=$14, meta_title=$15, meta_description=$16, og_image_url=$17,
-		 show_on_homepage=$18, rating=$19, rating_count=$20, hero_image_media_id=$21, feature_sections=$22, use_case_tabs=$23,
-		 updated_by=$24, updated_at=now() WHERE id=$25`,
+		 canonical_url=$18, noindex=$19, structured_data=$20,
+		 show_on_homepage=$21, rating=$22, rating_count=$23, hero_image_media_id=$24, feature_sections=$25, use_case_tabs=$26,
+		 updated_by=$27, updated_at=now() WHERE id=$28`,
 		req.Slug, req.Name, req.Category, req.IconMediaID, req.ShortDescription, req.Description, req.Features,
 		req.PrivacyPolicyContent, req.InstructionsContent, req.GooglePlayURL, req.AppStoreURL, req.WebsiteURL,
-		req.PricingNote, req.SortOrder, req.MetaTitle, req.MetaDescription, req.OGImageURL, req.ShowOnHomepage,
+		req.PricingNote, req.SortOrder, req.MetaTitle, req.MetaDescription, req.OGImageURL, req.CanonicalURL, req.NoIndex, req.StructuredData,
+		req.ShowOnHomepage,
 		req.Rating, req.RatingCount, req.HeroImageMediaID, req.FeatureSections, req.UseCaseTabs, userID, id,
 	)
 	if err != nil {
@@ -318,14 +347,18 @@ func (h *AppHandler) QuickEdit(c echo.Context) error {
 
 	ctx, cancel := db.WithTimeout()
 	defer cancel()
-	_, err := h.Pool.Exec(ctx,
+	var slug string
+	err := h.Pool.QueryRow(ctx,
 		`UPDATE apps SET name=$1, slug=$2, status=$3, updated_at=now(),
 		 published_at = CASE WHEN $3='published' AND published_at IS NULL THEN now() ELSE published_at END
-		 WHERE id=$4`,
+		 WHERE id=$4 RETURNING slug`,
 		req.Name, req.Slug, req.Status, id,
-	)
+	).Scan(&slug)
 	if err != nil {
 		return c.JSON(http.StatusConflict, map[string]string{"error": "slug_taken_or_invalid"})
+	}
+	if req.Status == "published" {
+		PingIndexNow(h.Pool, h.BaseURL, []string{h.BaseURL + "/apps/" + slug})
 	}
 	return c.NoContent(http.StatusOK)
 }
@@ -353,10 +386,13 @@ func (h *AppHandler) Categories(c echo.Context) error {
 func (h *AppHandler) Publish(c echo.Context) error {
 	ctx, cancel := db.WithTimeout()
 	defer cancel()
-	_, err := h.Pool.Exec(ctx, "UPDATE apps SET status='published', published_at=now(), updated_at=now() WHERE id=$1", c.Param("id"))
+	var slug string
+	err := h.Pool.QueryRow(ctx,
+		"UPDATE apps SET status='published', published_at=now(), updated_at=now() WHERE id=$1 RETURNING slug", c.Param("id")).Scan(&slug)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "publish_failed"})
 	}
+	PingIndexNow(h.Pool, h.BaseURL, []string{h.BaseURL + "/apps/" + slug})
 	return c.NoContent(http.StatusOK)
 }
 
@@ -398,15 +434,13 @@ func (h *AppHandler) CancelSchedule(c echo.Context) error {
 	return c.NoContent(http.StatusOK)
 }
 
-func (h *AppHandler) Delete(c echo.Context) error {
-	ctx, cancel := db.WithTimeout()
-	defer cancel()
-	_, err := h.Pool.Exec(ctx, "DELETE FROM apps WHERE id=$1", c.Param("id"))
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "delete_failed"})
-	}
-	return c.NoContent(http.StatusNoContent)
+func (h *AppHandler) Delete(c echo.Context) error   { return softDeleteContent(h.Pool, "apps")(c) }
+func (h *AppHandler) Restore(c echo.Context) error  { return restoreContent(h.Pool, "apps")(c) }
+func (h *AppHandler) PermanentDelete(c echo.Context) error {
+	return permanentDeleteContent(h.Pool, "apps")(c)
 }
+func (h *AppHandler) SubmitReview(c echo.Context) error   { return submitReview(h.Pool, "apps")(c) }
+func (h *AppHandler) ReviewDecision(c echo.Context) error { return reviewDecision(h.Pool, "apps")(c) }
 
 type screenshotRequest struct {
 	MediaID   string `json:"media_id"`

@@ -9,23 +9,36 @@ import { Card } from "@/components/admin/m3/Card";
 import { Button } from "@/components/admin/m3/Button";
 import { Switch } from "@/components/admin/m3/Switch";
 import { SegmentedButton } from "@/components/admin/m3/SegmentedButton";
+import { EmptyState } from "@/components/admin/m3/EmptyState";
 import { ConfirmDialog } from "@/components/admin/ConfirmDialog";
 import { BlockEditor } from "@/components/admin/BlockEditor";
 import type { AppListItem, SiteSettings, TestimonialItem } from "@/lib/admin-types";
 import type { PublicPageBlock } from "@/lib/api";
 
-type HomepageMode = "landing" | "blog" | "minimal";
+type HomepageMode = "landing" | "blog" | "marketplace";
 
 function normalizeMode(layout: SiteSettings["homepage_layout"]): HomepageMode {
-  if (layout === "landing" || layout === "blog" || layout === "minimal") return layout;
+  if (layout === "landing" || layout === "blog" || layout === "marketplace") return layout;
+  // "minimal"/"apps_grid" is the old mode Marketplace replaced — map any existing data onto
+  // the new stub rather than dropping it into an unlabeled state.
+  if (layout === "minimal" || layout === "apps_grid") return "marketplace";
   if (layout === "mixed" || layout === "text_focused") return "landing";
-  return "minimal";
+  return "marketplace";
 }
 
 const inputClass =
   "block w-full rounded-md border border-md-outline-variant bg-transparent px-2.5 py-2 text-sm text-md-on-surface outline-none focus:border-md-outline";
 
 const previewBox = "block rounded-sm bg-md-on-surface-variant/70";
+
+// Which of the 5 section toggles the public renderer (frontend/src/app/(site)/page.tsx)
+// actually reads, per homepage mode — keeping this in sync avoids showing a switch
+// that has zero effect on the live site.
+const MODE_VISIBLE_SECTIONS: Record<HomepageMode, (keyof NonNullable<SiteSettings["homepage_sections"]>)[]> = {
+  landing: ["hero", "blog"],
+  marketplace: ["hero"],
+  blog: ["hero", "apps", "testimonials"],
+};
 
 const SECTION_LABELS: {
   key: keyof NonNullable<SiteSettings["homepage_sections"]>;
@@ -209,7 +222,7 @@ export default function HomepagePage() {
   const queryClient = useQueryClient();
   const { showToast } = useToast();
 
-  const [mode, setMode] = useState<HomepageMode>("minimal");
+  const [mode, setMode] = useState<HomepageMode>("marketplace");
   const [sections, setSections] = useState(DEFAULT_SECTIONS);
   const [stats, setStats] = useState(EMPTY_STATS);
   const [blocks, setBlocks] = useState<PublicPageBlock[]>([]);
@@ -304,7 +317,7 @@ export default function HomepagePage() {
           segments={[
             { value: "landing", label: "Landing" },
             { value: "blog", label: "Blog" },
-            { value: "minimal", label: "Minimal" },
+            { value: "marketplace", label: "Marketplace" },
           ]}
           value={mode}
           onChange={setMode}
@@ -312,32 +325,49 @@ export default function HomepagePage() {
         <p className="md-body-small mt-2 text-md-on-surface-variant">
           {mode === "landing" && "Полная композиция из блоков ниже — hero, затем настраиваемые секции, затем блог."}
           {mode === "blog" && "Лента блога — основной контент, приложения и отзывы уходят в конец страницы."}
-          {mode === "minimal" && "Облегчённый вид: только hero, статистика и сетка приложений."}
+          {mode === "marketplace" &&
+            "Заглушка «Marketplace — скоро»: на главной показывается только hero и информационный блок. Полноценный маркетплейс ещё в разработке."}
         </p>
       </Card>
 
       <Card elevation={1} outlined className="mb-6 p-4">
         <p className="md-title-small mb-3 text-md-on-surface-variant">Видимость секций</p>
-        <div className="grid grid-cols-2 gap-3">
-          {SECTION_LABELS.map(({ key, label, description, preview }) => (
-            <div key={key} className="flex items-center gap-3 rounded-lg border border-md-outline-variant p-3">
-              <div className="flex h-12 w-14 shrink-0 items-center justify-center rounded-md bg-md-surface-container-low">
-                {preview}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {SECTION_LABELS.filter(({ key }) => MODE_VISIBLE_SECTIONS[mode].includes(key)).map(
+            ({ key, label, description, preview }) => (
+              <div key={key} className="flex items-center gap-3 rounded-lg border border-md-outline-variant p-3">
+                <div className="flex h-12 w-14 shrink-0 items-center justify-center rounded-md bg-md-surface-container-low">
+                  {preview}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="md-body-medium m-0 text-md-on-surface">{label}</p>
+                  <p className="md-body-small m-0 text-md-on-surface-variant">{description}</p>
+                </div>
+                <Switch checked={sections[key]} onChange={(v) => setSections({ ...sections, [key]: v })} />
               </div>
-              <div className="min-w-0 flex-1">
-                <p className="md-body-medium m-0 text-md-on-surface">{label}</p>
-                <p className="md-body-small m-0 text-md-on-surface-variant">{description}</p>
-              </div>
-              <Switch checked={sections[key]} onChange={(v) => setSections({ ...sections, [key]: v })} />
-            </div>
-          ))}
+            )
+          )}
         </div>
+        {mode === "landing" && (
+          <p className="md-body-small mt-3 text-md-on-surface-variant">
+            В режиме Landing статистика, сетка приложений и отзывы управляются блоками «Статистика», «Витрина
+            приложений» и «Карусель отзывов» в редакторе блоков ниже, а не этими переключателями.
+          </p>
+        )}
       </Card>
 
       {mode === "landing" ? (
         <Card elevation={1} outlined className="mb-6 p-4">
           <p className="md-title-small mb-3 text-md-on-surface-variant">Блоки лендинга</p>
           <BlockEditor value={blocks} onChange={setBlocks} />
+        </Card>
+      ) : mode === "marketplace" ? (
+        <Card elevation={0} outlined className="mb-6 p-4">
+          <p className="md-title-small mb-1 text-md-on-surface-variant">Marketplace — заглушка</p>
+          <p className="md-body-small text-md-on-surface-variant">
+            Публичная страница сейчас показывает только hero и блок «Скоро». Статистика и остальные секции появятся
+            здесь, когда маркетплейс будет готов.
+          </p>
         </Card>
       ) : (
         <Card elevation={1} outlined className="mb-6 p-4">
@@ -429,9 +459,7 @@ export default function HomepagePage() {
           )
         )}
         {testimonials?.length === 0 && !testimonialsLoading && !addingTestimonial && (
-          <Card elevation={0} className="p-6 text-center">
-            <p className="md-body-medium m-0 text-md-on-surface-variant">Отзывов пока нет.</p>
-          </Card>
+          <EmptyState icon="ti-quote" title="Отзывов пока нет" description="Добавьте первый отзыв, чтобы он появился на сайте." />
         )}
       </div>
 

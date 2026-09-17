@@ -1,10 +1,12 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { getPublicApp } from "@/lib/api";
+import { getPublicApp, getPublicSettings } from "@/lib/api";
+import { applyTitleTemplate } from "@/lib/seo";
 import { AppTabs } from "@/components/site/AppTabs";
 import { FeatureSections } from "@/components/site/FeatureSections";
 import { UseCaseTabs } from "@/components/site/UseCaseTabs";
+import { Breadcrumbs } from "@/components/site/Breadcrumbs";
+import { PageContainer } from "@/components/site/PageContainer";
 
 export const dynamic = "force-dynamic";
 
@@ -24,18 +26,19 @@ type Props = { params: Promise<{ slug: string }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
-  const app = await getPublicApp(slug);
+  const [app, settings] = await Promise.all([getPublicApp(slug), getPublicSettings()]);
   if (!app) return {};
 
-  const title = app.meta_title || `${app.name} — lecode`;
-  const description = app.meta_description || app.short_description || undefined;
-  const url = `https://lecode.tech/apps/${app.slug}`;
-  const image = app.og_image_url || app.icon_url || undefined;
+  const title = app.meta_title || applyTitleTemplate(app.name, settings.seo_title_template);
+  const description = app.meta_description || app.short_description || settings.seo_default_meta_description || undefined;
+  const url = app.canonical_url || `https://lecode.tech/apps/${app.slug}`;
+  const image = app.og_image_url || app.icon_url || settings.default_og_image_url || undefined;
 
   return {
     title,
     description,
     alternates: { canonical: url },
+    robots: app.noindex ? { index: false, follow: true } : undefined,
     openGraph: {
       title,
       description,
@@ -55,13 +58,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function AppPage({ params }: Props) {
   const { slug } = await params;
-  const app = await getPublicApp(slug);
+  const [app, settings] = await Promise.all([getPublicApp(slug), getPublicSettings()]);
   if (!app) notFound();
 
   const color = appColors[app.slug] || "#8A8C93";
   const icon = appIcons[app.slug] || "ti-app-window";
 
-  const jsonLd = {
+  const jsonLd = app.structured_data ?? {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
     name: app.name,
@@ -75,28 +78,35 @@ export default async function AppPage({ params }: Props) {
         : undefined,
   };
 
+  const breadcrumbJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: "https://lecode.tech/" },
+      { "@type": "ListItem", position: 2, name: "Apps", item: "https://lecode.tech/apps" },
+      { "@type": "ListItem", position: 3, name: app.name, item: `https://lecode.tech/apps/${app.slug}` },
+    ],
+  };
+
   const primaryStoreLink = app.google_play_url || app.app_store_url;
 
   return (
     <div>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      {settings.seo_json_ld_enabled !== false && (
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      )}
+      {settings.seo_show_breadcrumbs !== false && (
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }} />
+      )}
 
-      <div style={{ maxWidth: 960, margin: "0 auto", padding: "2rem 2rem 0" }}>
-        <nav style={{ marginBottom: 24, fontSize: 13, color: "#8A8C93" }}>
-          <Link href="/" style={{ color: "#8A8C93", textDecoration: "none" }}>
-            lecode
-          </Link>
-          <span style={{ margin: "0 6px" }}>/</span>
-          <span style={{ color: "#17181C" }}>{app.name}</span>
-        </nav>
-      </div>
+      {settings.seo_show_breadcrumbs !== false && (
+        <Breadcrumbs items={[{ label: "Home", href: "/" }, { label: "Apps" }, { label: app.name }]} />
+      )}
 
       {/* ---- Hero ---- */}
-      <section
+      <section style={{ padding: "0 0 3rem" }}>
+      <PageContainer
         style={{
-          maxWidth: 960,
-          margin: "0 auto",
-          padding: "0 2rem 3rem",
           display: "grid",
           gridTemplateColumns: app.hero_image_url ? "repeat(auto-fit, minmax(320px, 1fr))" : "1fr",
           gap: 40,
@@ -162,14 +172,12 @@ export default async function AppPage({ params }: Props) {
             style={{ width: "100%", borderRadius: 16, border: "0.5px solid #EAE8E1" }}
           />
         )}
+      </PageContainer>
       </section>
 
       {app.screenshots.length > 0 && (
-        <div
+        <PageContainer
           style={{
-            maxWidth: 960,
-            margin: "0 auto",
-            padding: "0 2rem",
             display: "flex",
             gap: 12,
             overflowX: "auto",
@@ -191,7 +199,7 @@ export default async function AppPage({ params }: Props) {
               }}
             />
           ))}
-        </div>
+        </PageContainer>
       )}
 
       {/* ---- Feature sections ---- */}
@@ -203,13 +211,9 @@ export default async function AppPage({ params }: Props) {
       {/* ---- Rating + repeat CTA ---- */}
       {app.rating != null && app.rating_count != null && (
         <section
-          style={{
-            maxWidth: 960,
-            margin: "0 auto",
-            padding: "0 2rem 4rem",
-            textAlign: "center",
-          }}
+          style={{ padding: "0 0 4rem" }}
         >
+          <PageContainer style={{ textAlign: "center" }}>
           <div
             style={{
               border: "0.5px solid #EAE8E1",
@@ -243,11 +247,12 @@ export default async function AppPage({ params }: Props) {
               </a>
             )}
           </div>
+          </PageContainer>
         </section>
       )}
 
       {/* ---- Detailed info ---- */}
-      <div style={{ maxWidth: 720, margin: "0 auto", padding: "0 2rem 4rem" }}>
+      <PageContainer style={{ maxWidth: 720, padding: "0 2rem 4rem" }}>
         {app.description && (
           <p style={{ fontSize: 15, color: "#17181C", lineHeight: 1.8, marginBottom: 32, whiteSpace: "pre-wrap" }}>
             {app.description}
@@ -255,7 +260,7 @@ export default async function AppPage({ params }: Props) {
         )}
 
         <AppTabs features={app.features} instructions={app.instructions_content} privacy={app.privacy_policy_content} />
-      </div>
+      </PageContainer>
     </div>
   );
 }

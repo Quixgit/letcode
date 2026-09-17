@@ -14,7 +14,8 @@ import (
 )
 
 type PageHandler struct {
-	Pool *pgxpool.Pool
+	Pool    *pgxpool.Pool
+	BaseURL string
 }
 
 type pageRequest struct {
@@ -36,11 +37,17 @@ func (h *PageHandler) List(c echo.Context) error {
 	defer cancel()
 	status := c.QueryParam("status")
 
-	query := "SELECT id, slug, title, template, status, meta_title, published_at, scheduled_publish_at, created_at, updated_at FROM pages"
+	// status=trash lists soft-deleted pages instead of live ones (see Delete/Restore/PermanentDelete).
+	query := "SELECT id, slug, title, template, status, meta_title, review_status, published_at, scheduled_publish_at, deleted_at, created_at, updated_at FROM pages"
 	args := []interface{}{}
-	if status != "" {
-		query += " WHERE status=$1"
-		args = append(args, status)
+	if status == "trash" {
+		query += " WHERE deleted_at IS NOT NULL"
+	} else {
+		query += " WHERE deleted_at IS NULL"
+		if status != "" {
+			query += " AND status=$1"
+			args = append(args, status)
+		}
 	}
 	query += " ORDER BY updated_at DESC"
 
@@ -57,8 +64,10 @@ func (h *PageHandler) List(c echo.Context) error {
 		Template           string     `json:"template"`
 		Status             string     `json:"status"`
 		MetaTitle          *string    `json:"meta_title"`
+		ReviewStatus       string     `json:"review_status"`
 		PublishedAt        *time.Time `json:"published_at"`
 		ScheduledPublishAt *time.Time `json:"scheduled_publish_at"`
+		DeletedAt          *time.Time `json:"deleted_at"`
 		CreatedAt          time.Time  `json:"created_at"`
 		UpdatedAt          time.Time  `json:"updated_at"`
 	}
@@ -66,7 +75,7 @@ func (h *PageHandler) List(c echo.Context) error {
 	items := []pageListItem{}
 	for rows.Next() {
 		var p pageListItem
-		if err := rows.Scan(&p.ID, &p.Slug, &p.Title, &p.Template, &p.Status, &p.MetaTitle, &p.PublishedAt, &p.ScheduledPublishAt, &p.CreatedAt, &p.UpdatedAt); err != nil {
+		if err := rows.Scan(&p.ID, &p.Slug, &p.Title, &p.Template, &p.Status, &p.MetaTitle, &p.ReviewStatus, &p.PublishedAt, &p.ScheduledPublishAt, &p.DeletedAt, &p.CreatedAt, &p.UpdatedAt); err != nil {
 			continue
 		}
 		items = append(items, p)
@@ -83,10 +92,12 @@ func (h *PageHandler) Get(c echo.Context) error {
 	var p models.Page
 	err := h.Pool.QueryRow(ctx,
 		`SELECT id, slug, title, template, status, content, meta_title, meta_description,
-		 og_image_url, canonical_url, noindex, structured_data, published_at, scheduled_publish_at, created_at, updated_at
+		 og_image_url, canonical_url, noindex, structured_data, published_at, scheduled_publish_at,
+		 deleted_at, review_status, review_note, review_requested_by, created_at, updated_at
 		 FROM pages WHERE id=$1`, id,
 	).Scan(&p.ID, &p.Slug, &p.Title, &p.Template, &p.Status, &p.Content, &p.MetaTitle, &p.MetaDescription,
-		&p.OGImageURL, &p.CanonicalURL, &p.NoIndex, &p.StructuredData, &p.PublishedAt, &p.ScheduledPublishAt, &p.CreatedAt, &p.UpdatedAt)
+		&p.OGImageURL, &p.CanonicalURL, &p.NoIndex, &p.StructuredData, &p.PublishedAt, &p.ScheduledPublishAt,
+		&p.DeletedAt, &p.ReviewStatus, &p.ReviewNote, &p.ReviewRequestedBy, &p.CreatedAt, &p.UpdatedAt)
 
 	if err == pgx.ErrNoRows {
 		return c.JSON(http.StatusNotFound, map[string]string{"error": "page_not_found"})
@@ -103,7 +114,7 @@ func (h *PageHandler) ListPublic(c echo.Context) error {
 	defer cancel()
 
 	rows, err := h.Pool.Query(ctx,
-		`SELECT slug, title FROM pages WHERE status='published' AND noindex=false ORDER BY title ASC`)
+		`SELECT slug, title FROM pages WHERE status='published' AND noindex=false AND deleted_at IS NULL ORDER BY title ASC`)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "query_failed"})
 	}
@@ -133,7 +144,7 @@ func (h *PageHandler) GetBySlug(c echo.Context) error {
 	err := h.Pool.QueryRow(ctx,
 		`SELECT id, slug, title, template, status, content, meta_title, meta_description,
 		 og_image_url, canonical_url, noindex, structured_data, published_at, created_at, updated_at
-		 FROM pages WHERE slug=$1 AND status='published'`, slug,
+		 FROM pages WHERE slug=$1 AND status='published' AND deleted_at IS NULL`, slug,
 	).Scan(&p.ID, &p.Slug, &p.Title, &p.Template, &p.Status, &p.Content, &p.MetaTitle, &p.MetaDescription,
 		&p.OGImageURL, &p.CanonicalURL, &p.NoIndex, &p.StructuredData, &p.PublishedAt, &p.CreatedAt, &p.UpdatedAt)
 
@@ -159,7 +170,7 @@ func (h *PageHandler) PreviewByID(c echo.Context) error {
 	err := h.Pool.QueryRow(ctx,
 		`SELECT id, slug, title, template, status, content, meta_title, meta_description,
 		 og_image_url, canonical_url, noindex, structured_data, published_at, created_at, updated_at
-		 FROM pages WHERE id=$1`, id,
+		 FROM pages WHERE id=$1 AND deleted_at IS NULL`, id,
 	).Scan(&p.ID, &p.Slug, &p.Title, &p.Template, &p.Status, &p.Content, &p.MetaTitle, &p.MetaDescription,
 		&p.OGImageURL, &p.CanonicalURL, &p.NoIndex, &p.StructuredData, &p.PublishedAt, &p.CreatedAt, &p.UpdatedAt)
 
@@ -262,14 +273,18 @@ func (h *PageHandler) QuickEdit(c echo.Context) error {
 
 	ctx, cancel := db.WithTimeout()
 	defer cancel()
-	_, err := h.Pool.Exec(ctx,
+	var slug string
+	err := h.Pool.QueryRow(ctx,
 		`UPDATE pages SET title=$1, slug=$2, status=$3, updated_at=now(),
 		 published_at = CASE WHEN $3='published' AND published_at IS NULL THEN now() ELSE published_at END
-		 WHERE id=$4`,
+		 WHERE id=$4 RETURNING slug`,
 		req.Title, req.Slug, req.Status, id,
-	)
+	).Scan(&slug)
 	if err != nil {
 		return c.JSON(http.StatusConflict, map[string]string{"error": "slug_taken_or_invalid"})
+	}
+	if req.Status == "published" {
+		PingIndexNow(h.Pool, h.BaseURL, []string{h.BaseURL + "/" + slug})
 	}
 	return c.NoContent(http.StatusOK)
 }
@@ -279,11 +294,13 @@ func (h *PageHandler) Publish(c echo.Context) error {
 	ctx, cancel := db.WithTimeout()
 	defer cancel()
 
-	_, err := h.Pool.Exec(ctx,
-		"UPDATE pages SET status='published', published_at=now(), updated_at=now() WHERE id=$1", id)
+	var slug string
+	err := h.Pool.QueryRow(ctx,
+		"UPDATE pages SET status='published', published_at=now(), updated_at=now() WHERE id=$1 RETURNING slug", id).Scan(&slug)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "publish_failed"})
 	}
+	PingIndexNow(h.Pool, h.BaseURL, []string{h.BaseURL + "/" + slug})
 	return c.NoContent(http.StatusOK)
 }
 
@@ -363,14 +380,12 @@ func (h *PageHandler) ListRevisions(c echo.Context) error {
 	return c.JSON(http.StatusOK, items)
 }
 
-func (h *PageHandler) Delete(c echo.Context) error {
-	id := c.Param("id")
-	ctx, cancel := db.WithTimeout()
-	defer cancel()
-
-	_, err := h.Pool.Exec(ctx, "DELETE FROM pages WHERE id=$1", id)
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "delete_failed"})
-	}
-	return c.NoContent(http.StatusNoContent)
+// Delete moves a page to the trash (deleted_at set) rather than deleting it outright —
+// WordPress-style. See PermanentDelete for the irreversible step, admin-only.
+func (h *PageHandler) Delete(c echo.Context) error { return softDeleteContent(h.Pool, "pages")(c) }
+func (h *PageHandler) Restore(c echo.Context) error { return restoreContent(h.Pool, "pages")(c) }
+func (h *PageHandler) PermanentDelete(c echo.Context) error {
+	return permanentDeleteContent(h.Pool, "pages")(c)
 }
+func (h *PageHandler) SubmitReview(c echo.Context) error   { return submitReview(h.Pool, "pages")(c) }
+func (h *PageHandler) ReviewDecision(c echo.Context) error { return reviewDecision(h.Pool, "pages")(c) }

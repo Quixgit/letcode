@@ -19,10 +19,26 @@
   }
 }
 
+/* A full-width block (hero_slider's `full_width` option) breaks out of its container via the
+   standard `width:100vw; margin-left:-50vw` trick — 100vw measures past the scrollbar on
+   desktop, so without clipping both html and body it adds a few px of real horizontal scroll
+   site-wide (the browser's own scrollbar lives on the html/documentElement box, not body, so
+   body alone isn't enough to stop `document.documentElement.scrollWidth` from overflowing).
+   `clip`, not `hidden`: per the CSS Overflow spec, setting only overflow-x to a non-'visible'
+   value forces the browser to silently promote the unset overflow-y to 'auto' too — but only
+   for 'hidden'/'scroll'/'auto', not for 'clip'. That promotion turned html AND body into their
+   own independent scroll containers, which breaks `position: sticky` for anything inside body
+   (the sticky header): the header sticks relative to body's scroll frame while the visible
+   page actually scrolls via html's, so it just scrolled away like `position: static`. */
+html {
+  overflow-x: clip;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-ubuntu), "Ubuntu", Arial, Helvetica, sans-serif;
+  overflow-x: clip;
 }
 
 /* ==========================================================================
@@ -53,6 +69,13 @@ body {
   --md-on-tertiary: #ffffff;
   --md-tertiary-container: #f4f4f5;
   --md-on-tertiary-container: #18181b;
+
+  /* accent — the one spot of real color in an otherwise neutral admin: primary actions,
+     the active nav item, "on" switches, key numbers. Used sparingly on purpose. */
+  --md-accent: #5b5fc7;
+  --md-on-accent: #ffffff;
+  --md-accent-container: #eef0fd;
+  --md-on-accent-container: #363a91;
 
   --md-error: #dc2626;
   --md-on-error: #ffffff;
@@ -132,6 +155,11 @@ body {
   --md-tertiary-container: #27272a;
   --md-on-tertiary-container: #fafafa;
 
+  --md-accent: #7c80e0;
+  --md-on-accent: #14153a;
+  --md-accent-container: #2a2c66;
+  --md-on-accent-container: #dcdcfb;
+
   --md-error: #f87171;
   --md-on-error: #450a0a;
   --md-error-container: #3f1212;
@@ -187,6 +215,11 @@ body {
   --color-md-on-tertiary: var(--md-on-tertiary);
   --color-md-tertiary-container: var(--md-tertiary-container);
   --color-md-on-tertiary-container: var(--md-on-tertiary-container);
+
+  --color-md-accent: var(--md-accent);
+  --color-md-on-accent: var(--md-on-accent);
+  --color-md-accent-container: var(--md-accent-container);
+  --color-md-on-accent-container: var(--md-on-accent-container);
 
   --color-md-error: var(--md-error);
   --color-md-on-error: var(--md-on-error);
@@ -261,6 +294,29 @@ body {
 .md-motion {
   transition-timing-function: var(--md-easing-emphasized);
   transition-duration: var(--md-duration-medium);
+}
+
+/* Default smooth hover/focus/active transitions across the admin console.
+   Most interactive elements only ever change color/background/border/opacity
+   on state change (no layout-affecting properties), so a blanket transition
+   here keeps every hover in the admin animated without requiring each call
+   site to opt into `.md-motion` individually. Scoped to `.md-admin-root` so
+   it never touches the public site, which is styled independently. */
+.md-admin-root a,
+.md-admin-root button,
+.md-admin-root [class*="hover:"] {
+  transition-property: color, background-color, border-color, box-shadow, opacity, transform;
+  transition-duration: var(--md-duration-medium);
+  transition-timing-function: var(--md-easing-emphasized);
+}
+
+/* Soft accent-colored focus glow on top of whatever border-color change a field's own
+   `focus:border-*` class already does — one place to keep every input/select/textarea's
+   focus state feeling the same instead of copy-pasted per screen. */
+.md-admin-root input:focus,
+.md-admin-root select:focus,
+.md-admin-root textarea:focus {
+  box-shadow: 0 0 0 3px var(--md-accent-container);
 }
 
 .md-card--interactive {
@@ -343,6 +399,228 @@ body {
   animation: site-mega-panel-in 180ms ease;
 }
 
+/* contact_form block: focus ring on the active field, and a small settle-in for the
+   post-submit success state (same easing/duration language as the mega panel above). */
+.site-form-field {
+  transition: border-color 150ms ease;
+}
+.site-form-field:focus {
+  border-color: var(--site-accent, #17181C) !important;
+}
+@keyframes site-form-success-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Header nav items: light hover/open highlight only (text color + underline), never a filled
+   background block — applies uniformly to plain links, dropdown triggers, and mega_menu triggers. */
+.site-nav-link {
+  color: var(--site-text-muted, #8A8C93);
+  transition: color 180ms ease;
+  position: relative;
+  /* Defensive reset: a <button> can pick up native OS/browser hover-or-tap chrome (a shaded
+     rect or highlight) that isn't covered by background/border alone — kill it explicitly so
+     the only visible change on hover/focus is the text color set below, never a box. */
+  appearance: none;
+  -webkit-appearance: none;
+  -webkit-tap-highlight-color: transparent;
+  outline: none;
+  box-shadow: none;
+}
+.site-nav-link::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -4px;
+  height: 1.5px;
+  background: var(--site-accent, #17181C);
+  transform: scaleX(0);
+  transform-origin: center;
+  transition: transform 200ms ease;
+}
+.site-nav-link:hover,
+.site-nav-link.site-nav-link--open {
+  color: var(--site-accent, #17181C);
+}
+.site-nav-link:hover::after,
+.site-nav-link.site-nav-link--open::after {
+  transform: scaleX(1);
+}
+/* Keyboard focus gets the exact same color+underline treatment as hover, deliberately never an
+   outline box — spec is "text color only, no fill/border/box" for every interaction, not just hover. */
+.site-nav-link:focus-visible {
+  color: var(--site-accent, #17181C);
+}
+.site-nav-link:focus-visible::after {
+  transform: scaleX(1);
+}
+
+/* Mega-menu sub-items (the item rows inside an open panel, e.g. Services' "By outcome" list):
+   same rule as top-level nav items — hover changes text/icon color only, never a shadow, lift,
+   or background block. These used to share `.site-hover-card` (built for actual content-card
+   grids, which SHOULD lift with a shadow) which is the wrong affordance for a flat menu row. */
+.site-menu-item:hover .site-menu-item-title {
+  color: var(--site-accent, #17181C) !important;
+}
+.site-menu-item:hover .site-menu-item-icon i {
+  color: var(--site-accent, #17181C) !important;
+}
+
+/* Blog cards (homepage "Latest from the blog" AND /blog index — one shared component,
+   BlogCard.tsx, so this is the only hover rule that needs to exist). Deliberately NOT the
+   lift+shadow `.site-hover-card` treatment: these cards have no visible border/background of
+   their own, so a shadow appearing out of nowhere on hover read as a floating box rather than a
+   highlight. Instead: the cover image zooms in slightly and the title tints + underlines, the
+   same restrained "color/motion only, never a box" language as `.site-nav-link`. The generic
+   `.site-root a:hover{opacity:.85}` rule would otherwise dim the whole card (image included) on
+   top of this — explicitly reset back to full opacity here. */
+.site-blog-card {
+  opacity: 1;
+}
+.site-blog-card:hover {
+  opacity: 1 !important;
+}
+.site-blog-card-image {
+  transition: transform 0.4s ease;
+}
+.site-blog-card:hover .site-blog-card-image {
+  transform: scale(1.06);
+}
+.site-blog-card-title {
+  position: relative;
+  width: fit-content;
+}
+.site-blog-card-title::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -2px;
+  height: 1px;
+  background: currentColor;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 220ms ease;
+}
+.site-blog-card:hover .site-blog-card-title {
+  color: var(--site-accent, #17181C) !important;
+}
+.site-blog-card:hover .site-blog-card-title::after {
+  transform: scaleX(1);
+}
+
+/* Breadcrumb trail links: color-only hover (no underline/box), consistent with this site's other
+   plain muted-text link treatments (footer links, tag pills). */
+.site-breadcrumb-link {
+  transition: color 150ms ease;
+}
+.site-breadcrumb-link:hover {
+  color: var(--site-accent, #E63946) !important;
+}
+
+/* platform_grid / logo_grid cards (Platforms We Support, Tools We Use): scale up + a red
+   accent ring with a soft glow + a deeper shadow on hover, same treatment for both the dark and
+   light theme variant and regardless of `featured`. */
+.site-logo-card {
+  transition: transform 220ms ease-out, box-shadow 220ms ease-out, border-color 220ms ease-out;
+}
+.site-logo-card:hover {
+  transform: scale(1.045);
+  border-color: var(--site-accent, #E63946) !important;
+  box-shadow:
+    0 14px 28px rgba(0, 0, 0, 0.16),
+    0 0 0 1px var(--site-accent, #E63946),
+    0 0 22px rgba(230, 57, 70, 0.35) !important;
+}
+.site-logo-card:hover .site-logo-card-title {
+  color: var(--site-accent, #E63946) !important;
+}
+
+/* faq_accordion: the whole card lifts with a soft red-tinted shadow + accent border on hover,
+   and the question text tints red too — chevron color/rotation is handled separately, inline,
+   via React `open` state (FaqAccordion.tsx) since that's real app state, not a CSS pseudo-class. */
+.site-faq-card {
+  transition: transform 220ms ease-out, box-shadow 220ms ease-out, border-color 220ms ease-out, background 220ms ease-out;
+}
+.site-faq-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--site-accent, #E63946) !important;
+  box-shadow: 0 10px 24px rgba(230, 57, 70, 0.12), 0 0 0 1px rgba(230, 57, 70, 0.15) !important;
+}
+.site-faq-card.site-faq-card--open {
+  border-color: var(--site-accent, #E63946) !important;
+}
+.site-faq-toggle:hover .site-faq-question {
+  color: var(--site-accent, #E63946) !important;
+}
+.site-faq-toggle:hover .site-faq-chevron {
+  color: var(--site-accent, #E63946) !important;
+}
+
+/* why_choose_us: horizontal row with a thin vertical divider between columns on desktop, no
+   divider once it stacks on mobile (handled in the max-width:640px block below). */
+.site-why-choose-row {
+  display: flex;
+  align-items: flex-start;
+}
+.site-why-choose-item {
+  flex: 1;
+  min-width: 0;
+  padding: 0 1.5rem;
+}
+.site-why-choose-item:not(:first-child) {
+  border-left: 1px solid #EAE8E1;
+}
+
+/* hero_split_diagram: two-column split on desktop, stacked on mobile; the small stats row
+   reuses the same thin-vertical-divider idea as why_choose_us, just simplified (no icon, no
+   section padding — it's a compact inline row inside the hero's left column). */
+.site-hero-stat {
+  padding-right: 22px;
+  margin-right: 22px;
+  border-right: 1px solid #EAE8E1;
+}
+.site-hero-stat:last-child {
+  border-right: none;
+  margin-right: 0;
+  padding-right: 0;
+}
+
+/* core_services_grid: non-featured cards lift slightly and reveal a hidden bullet list on
+   hover; the featured card (fully-filled accent gradient) gets no bullets and no hover reveal,
+   only the same lift as a subtle "still interactive" cue. */
+.site-service-card {
+  transition: transform 220ms ease-out, box-shadow 220ms ease-out, border-color 220ms ease-out;
+}
+.site-service-card:hover {
+  transform: translateY(-4px);
+  border-color: var(--site-accent, #E63946) !important;
+  box-shadow: 0 14px 28px rgba(23, 24, 28, 0.1), 0 0 0 1px var(--site-accent, #E63946) !important;
+}
+.site-service-card--featured:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 18px 34px rgba(230, 57, 70, 0.38) !important;
+}
+.site-service-bullets {
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  margin-top: 0;
+  transition: max-height 280ms ease, opacity 200ms ease, margin-top 280ms ease;
+}
+.site-service-card:hover .site-service-bullets {
+  max-height: 180px;
+  opacity: 1;
+  margin-top: 14px;
+}
+
 .site-nav-desktop {
   display: flex;
 }
@@ -369,11 +647,112 @@ body {
   .site-feature-grid {
     grid-template-columns: 1fr !important;
   }
+  .site-platform-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+  .site-services-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .site-faq-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .site-why-choose-row {
+    flex-direction: column !important;
+    gap: 28px;
+  }
+  .site-why-choose-item {
+    border-left: none !important;
+    padding: 0 !important;
+  }
+  .site-hero-split {
+    grid-template-columns: 1fr !important;
+    gap: 32px !important;
+  }
+  .site-hero-callouts {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 860px) and (min-width: 641px) {
+  .site-platform-grid {
+    grid-template-columns: repeat(3, 1fr) !important;
+  }
+  .site-services-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .site-mega-panel {
     animation: none;
+  }
+  .site-marquee-track {
+    animation: none !important;
+  }
+}
+
+/* logo_marquee: an infinite horizontal scroller. The track holds the item list duplicated once
+   (2x) and animates `translateX(0 -> -50%)` linear/infinite — since both halves are identical,
+   the reset at -50% is seamless. A soft edge mask (not a hard clip) fades logos in/out at the
+   container's left/right edges instead of an abrupt cut. Logos keep their real brand colors on
+   purpose (same rule already applied to the cloud-provider icons elsewhere on this site) — no
+   grayscale/accent recolor here. */
+.site-marquee {
+  width: 100%;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
+}
+.site-marquee-track {
+  display: flex;
+  align-items: center;
+  width: max-content;
+  gap: 56px;
+  padding: 0 28px;
+  animation-name: site-marquee-scroll;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+.site-marquee--pause-hover:hover .site-marquee-track {
+  animation-play-state: paused;
+}
+.site-marquee-item {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  height: 36px;
+}
+.site-marquee-logo {
+  height: 100%;
+  width: auto;
+  max-width: 150px;
+  object-fit: contain;
+}
+.site-marquee-wordmark {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--site-text-muted, #8A8C93);
+  white-space: nowrap;
+  letter-spacing: 0.2px;
+}
+@keyframes site-marquee-scroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@media (max-width: 640px) {
+  .site-marquee-track {
+    gap: 36px;
+  }
+  .site-marquee-item {
+    height: 30px;
+  }
+  .site-marquee-wordmark {
+    font-size: 15px;
   }
 }
 
@@ -423,6 +802,37 @@ body {
 }
 .site-richtext strong {
   font-weight: 600;
+}
+/* A <table> pasted into rich text often carries its own inline `width` (from whatever editor
+   it was copied out of, e.g. a fixed 840px) — an inline style always beats a class selector,
+   so without `!important` here that pasted width wins and the table sits at a fixed size
+   instead of filling the article column. `display: block` + `overflow-x: auto` on the table
+   itself keeps a genuinely wide one (long cell text, many columns) scrolling internally
+   instead of dragging the whole page along. */
+.site-richtext table {
+  display: block !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-collapse: collapse;
+  margin: 1.5rem 0;
+  font-size: 14px;
+}
+.site-richtext th,
+.site-richtext td {
+  border: 1px solid #EAE8E1;
+  padding: 8px 14px;
+  text-align: left;
+  white-space: normal;
+}
+.site-richtext th {
+  background: #F7F6F2;
+  font-weight: 600;
+  color: #17181c;
+}
+.site-richtext tr:nth-child(even) td {
+  background: #FBFAF7;
 }
 
 /* Same typography, scoped for the admin's live richtext editing surface. */

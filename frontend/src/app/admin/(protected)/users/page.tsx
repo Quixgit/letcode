@@ -4,11 +4,13 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { adminFetch } from "@/lib/admin-api";
 import { useToast } from "@/lib/toast";
-import { useIsAdmin } from "@/lib/role-context";
+import { useCurrentUser, useIsAdmin } from "@/lib/role-context";
 import { Card } from "@/components/admin/m3/Card";
 import { Button } from "@/components/admin/m3/Button";
 import { Chip } from "@/components/admin/m3/Chip";
 import { EmptyState } from "@/components/admin/m3/EmptyState";
+import { ConfirmDialog } from "@/components/admin/ConfirmDialog";
+import { SegmentedButton } from "@/components/admin/m3/SegmentedButton";
 import type { UserItem } from "@/lib/admin-types";
 
 const inputClass =
@@ -18,15 +20,18 @@ const ROLES = ["admin", "editor", "viewer"];
 
 export default function UsersPage() {
   const isAdmin = useIsAdmin();
+  const { user: currentUser } = useCurrentUser();
   const queryClient = useQueryClient();
   const { showToast } = useToast();
   const [email, setEmail] = useState("");
   const [role, setRole] = useState("editor");
   const [lastInvite, setLastInvite] = useState<{ email: string; temp_password: string } | null>(null);
+  const [tab, setTab] = useState<"active" | "trash">("active");
+  const [pendingDelete, setPendingDelete] = useState<UserItem | null>(null);
 
   const { data: users, isLoading } = useQuery({
-    queryKey: ["users"],
-    queryFn: () => adminFetch<UserItem[]>("api/users"),
+    queryKey: ["users", tab],
+    queryFn: () => adminFetch<UserItem[]>(`api/users${tab === "trash" ? "?trashed=true" : ""}`),
     enabled: isAdmin,
   });
 
@@ -62,6 +67,34 @@ export default function UsersPage() {
     onSuccess: () => {
       invalidate();
       showToast("Статус изменён");
+    },
+    onError: (err: Error) => showToast(err.message, "error"),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => adminFetch(`api/users/${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      invalidate();
+      setPendingDelete(null);
+      showToast("Пользователь перемещён в корзину");
+    },
+    onError: (err: Error) => {
+      setPendingDelete(null);
+      if (err.message.includes("cannot_delete_last_admin")) {
+        showToast("Нельзя удалить последнего администратора", "error");
+      } else if (err.message.includes("cannot_delete_self")) {
+        showToast("Нельзя удалить свой собственный аккаунт", "error");
+      } else {
+        showToast(err.message, "error");
+      }
+    },
+  });
+
+  const restoreMutation = useMutation({
+    mutationFn: (id: string) => adminFetch(`api/users/${id}/restore`, { method: "POST" }),
+    onSuccess: () => {
+      invalidate();
+      showToast("Пользователь восстановлен");
     },
     onError: (err: Error) => showToast(err.message, "error"),
   });
@@ -117,10 +150,25 @@ export default function UsersPage() {
         </Card>
       )}
 
+      <div className="mb-4">
+        <SegmentedButton
+          segments={[
+            { value: "active", label: "Активные" },
+            { value: "trash", label: "Корзина" },
+          ]}
+          value={tab}
+          onChange={(v) => setTab(v as "active" | "trash")}
+        />
+      </div>
+
       {isLoading && <p className="md-body-medium text-md-on-surface-variant">Загрузка...</p>}
 
       {users?.length === 0 && !isLoading ? (
-        <EmptyState icon="ti-users" title="Пользователей пока нет" description="Пригласите первого коллегу — им будет выдан временный пароль для первого входа." />
+        tab === "trash" ? (
+          <EmptyState icon="ti-trash" title="Корзина пуста" description="Удалённые пользователи появятся здесь." />
+        ) : (
+          <EmptyState icon="ti-users" title="Пользователей пока нет" description="Пригласите первого коллегу — им будет выдан временный пароль для первого входа." />
+        )
       ) : (
         <Card elevation={1} className="overflow-hidden">
           <div className="overflow-x-auto">
@@ -135,43 +183,85 @@ export default function UsersPage() {
                 </tr>
               </thead>
               <tbody>
-                {(users || []).map((u) => (
-                  <tr key={u.id} className="border-b border-md-outline-variant last:border-0">
-                    <td className="whitespace-nowrap px-4 py-2 text-md-on-surface">{u.email}</td>
-                    <td className="whitespace-nowrap px-4 py-2">
-                      <select
-                        value={u.role_name}
-                        onChange={(e) => roleMutation.mutate({ id: u.id, role_name: e.target.value })}
-                        className="rounded-md border border-md-outline-variant px-2 py-1 text-[12px] text-md-on-surface outline-none"
-                      >
-                        {ROLES.map((r) => (
-                          <option key={r} value={r}>
-                            {r}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-2">
-                      <Chip tone={u.is_active ? "success" : "neutral"}>{u.is_active ? "Активен" : "Отключён"}</Chip>
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-2 text-md-on-surface-variant">
-                      {u.last_login_at ? new Date(u.last_login_at).toLocaleString("ru-RU") : "—"}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-2 text-right">
-                      <button
-                        onClick={() => activeMutation.mutate({ id: u.id, is_active: !u.is_active })}
-                        className="text-[12px] text-md-on-surface-variant underline hover:text-md-on-surface"
-                      >
-                        {u.is_active ? "Отключить" : "Включить"}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {(users || []).map((u) => {
+                  const isSelf = currentUser?.email === u.email;
+                  return (
+                    <tr key={u.id} className="border-b border-md-outline-variant last:border-0">
+                      <td className="whitespace-nowrap px-4 py-2 text-md-on-surface">
+                        {u.email}
+                        {isSelf && <span className="ml-1.5 text-[11px] text-md-on-surface-variant">(вы)</span>}
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-2">
+                        {tab === "trash" ? (
+                          <Chip tone="neutral">{u.role_name}</Chip>
+                        ) : (
+                          <select
+                            value={u.role_name}
+                            onChange={(e) => roleMutation.mutate({ id: u.id, role_name: e.target.value })}
+                            className="rounded-md border border-md-outline-variant px-2 py-1 text-[12px] text-md-on-surface outline-none"
+                          >
+                            {ROLES.map((r) => (
+                              <option key={r} value={r}>
+                                {r}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-2">
+                        {tab === "trash" ? (
+                          <Chip tone="neutral">Удалён</Chip>
+                        ) : (
+                          <Chip tone={u.is_active ? "success" : "neutral"}>{u.is_active ? "Активен" : "Отключён"}</Chip>
+                        )}
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-2 text-md-on-surface-variant">
+                        {u.last_login_at ? new Date(u.last_login_at).toLocaleString("ru-RU") : "—"}
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-2 text-right">
+                        {tab === "trash" ? (
+                          <button
+                            onClick={() => restoreMutation.mutate(u.id)}
+                            className="text-[12px] text-md-on-surface-variant underline hover:text-md-on-surface"
+                          >
+                            Восстановить
+                          </button>
+                        ) : (
+                          <div className="flex items-center justify-end gap-3">
+                            <button
+                              onClick={() => activeMutation.mutate({ id: u.id, is_active: !u.is_active })}
+                              className="text-[12px] text-md-on-surface-variant underline hover:text-md-on-surface"
+                            >
+                              {u.is_active ? "Отключить" : "Включить"}
+                            </button>
+                            {!isSelf && (
+                              <button
+                                onClick={() => setPendingDelete(u)}
+                                className="text-md-on-surface-variant hover:text-md-error"
+                                title="Удалить"
+                              >
+                                <i className="ti ti-trash text-sm" />
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         </Card>
       )}
+
+      <ConfirmDialog
+        open={!!pendingDelete}
+        title={`Удалить пользователя «${pendingDelete?.email}»?`}
+        description="Пользователь будет перемещён в корзину и потеряет доступ немедленно. Созданный им контент останется без изменений."
+        onConfirm={() => pendingDelete && deleteMutation.mutate(pendingDelete.id)}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   );
 }

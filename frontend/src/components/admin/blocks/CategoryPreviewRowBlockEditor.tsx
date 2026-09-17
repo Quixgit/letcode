@@ -7,6 +7,12 @@ type Row = CategoryPreviewRowBlock["categories"][number]["rows"][number];
 
 const inputClass =
   "block w-full rounded-md border border-md-outline-variant bg-transparent px-2.5 py-1.5 text-[13px] text-md-on-surface outline-none focus:border-md-outline";
+// Same field, no `w-full` baked in — needed for the three width-constrained fields below, which
+// otherwise all fight over `w-full` (Tailwind resolves conflicting width utilities by stylesheet
+// order, not className position, so `w-full` tends to win) and end up rendering at ~equal widths
+// instead of their intended label/kind/value proportions.
+const fieldClass =
+  "rounded-md border border-md-outline-variant bg-transparent px-2.5 py-1.5 text-[13px] text-md-on-surface outline-none focus:border-md-outline";
 
 export function CategoryPreviewRowBlockEditor({
   block,
@@ -53,12 +59,12 @@ export function CategoryPreviewRowBlockEditor({
                 value={row.label}
                 onChange={(e) => updateRow(i, j, { label: e.target.value })}
                 placeholder="Подпись строки"
-                className={`${inputClass} w-32`}
+                className={`${fieldClass} min-w-[100px] flex-1`}
               />
               <select
                 value={row.kind}
                 onChange={(e) => updateRow(i, j, { kind: e.target.value as "slider" | "toggle" })}
-                className={`${inputClass} w-28`}
+                className={`${fieldClass} w-28 shrink-0`}
               >
                 <option value="slider">Слайдер</option>
                 <option value="toggle">Переключатель</option>
@@ -70,7 +76,7 @@ export function CategoryPreviewRowBlockEditor({
                   max={100}
                   value={row.value ?? 0}
                   onChange={(e) => updateRow(i, j, { value: Number(e.target.value) })}
-                  className={`${inputClass} w-20`}
+                  className={`${fieldClass} w-20 shrink-0`}
                 />
               ) : (
                 <label className="flex items-center gap-1 text-[12px] text-md-on-surface-variant">

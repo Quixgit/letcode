@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
+import Script from "next/script";
 import { Ubuntu } from "next/font/google";
 import "./globals.css";
+import { getPublicSettings } from "@/lib/api";
 
 const ubuntu = Ubuntu({
   subsets: ["latin", "cyrillic"],
@@ -9,33 +11,68 @@ const ubuntu = Ubuntu({
   display: "swap",
 });
 
-const organizationJsonLd = {
-  "@context": "https://schema.org",
-  "@type": "Organization",
-  name: "lecode",
-  url: "https://lecode.tech",
-  description: "A collection of focused apps for DevOps engineers, built by one person.",
-};
+const DEFAULT_TITLE = "lecode — small tools for infrastructure work";
+const DEFAULT_DESCRIPTION = "A collection of focused apps for DevOps engineers, built by one person.";
 
-export const metadata: Metadata = {
-  metadataBase: new URL("https://lecode.tech"),
-  title: "lecode — small tools for infrastructure work",
-  description: "A collection of focused apps for DevOps engineers, built by one person.",
-  openGraph: {
-    title: "lecode — small tools for infrastructure work",
-    description: "A collection of focused apps for DevOps engineers, built by one person.",
-    siteName: "lecode",
-    type: "website",
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "lecode — small tools for infrastructure work",
-    description: "A collection of focused apps for DevOps engineers, built by one person.",
-  },
-  robots: { index: true, follow: true },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const settings = await getPublicSettings();
+  const title = settings.site_name
+    ? `${settings.site_name}${settings.tagline ? ` — ${settings.tagline}` : ""}`
+    : DEFAULT_TITLE;
+  const description = settings.seo_default_meta_description || DEFAULT_DESCRIPTION;
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+  return {
+    metadataBase: new URL("https://lecode.tech"),
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      siteName: settings.site_name || "lecode",
+      type: "website",
+      images: settings.default_og_image_url ? [{ url: settings.default_og_image_url }] : undefined,
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+    },
+    robots: settings.seo_sitewide_noindex ? { index: false, follow: false } : { index: true, follow: true },
+    verification: {
+      google: settings.google_site_verification || undefined,
+      other: {
+        ...(settings.bing_site_verification ? { "msvalidate.01": settings.bing_site_verification } : {}),
+        ...(settings.yandex_site_verification ? { "yandex-verification": settings.yandex_site_verification } : {}),
+      },
+    },
+  };
+}
+
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  const settings = await getPublicSettings();
+  const orgName = settings.seo_organization_name || settings.site_name || "lecode";
+  const orgLogo = settings.seo_organization_logo_url || settings.logo_url;
+  const sameAs = [settings.social_twitter, settings.social_github, settings.social_linkedin].filter(
+    (url): url is string => !!url
+  );
+
+  const organizationJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    name: orgName,
+    url: "https://lecode.tech",
+    description: settings.seo_default_meta_description || DEFAULT_DESCRIPTION,
+    ...(orgLogo ? { logo: orgLogo } : {}),
+    ...(sameAs.length > 0 ? { sameAs } : {}),
+  };
+
+  const websiteJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    name: orgName,
+    url: "https://lecode.tech",
+  };
+
   return (
     <html lang="en">
       <head>
@@ -47,6 +84,31 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationJsonLd) }}
         />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteJsonLd) }}
+        />
+        {/* Settings → Analytics: saved here for a while but never actually rendered anywhere,
+            so switching a provider on in the admin silently did nothing. */}
+        {settings.analytics_provider === "google" && settings.analytics_id && (
+          <>
+            <Script
+              src={`https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(settings.analytics_id)}`}
+              strategy="afterInteractive"
+            />
+            <Script id="ga4-init" strategy="afterInteractive">
+              {`window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config',${JSON.stringify(settings.analytics_id)});`}
+            </Script>
+          </>
+        )}
+        {settings.analytics_provider === "plausible" && (
+          <Script
+            defer
+            data-domain={settings.analytics_id || "lecode.tech"}
+            src="https://plausible.io/js/script.js"
+            strategy="afterInteractive"
+          />
+        )}
       </head>
       <body className={`${ubuntu.variable} min-h-full flex flex-col`}>{children}</body>
     </html>

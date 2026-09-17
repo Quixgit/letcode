@@ -4,10 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { NavItem } from "@/lib/api";
 import type { NavMenuTab } from "@/lib/nav-menu-types";
+import { PageContainer } from "@/components/site/PageContainer";
 
+// Color lives in the `.site-nav-link` CSS class (globals.css), not here, because hover/open
+// states need a real `:hover`/`.site-nav-link--open` selector — inline styles can't express that.
 const linkStyle: React.CSSProperties = {
   fontSize: 14,
-  color: "var(--site-text-muted, #8A8C93)",
   textDecoration: "none",
   background: "none",
   border: "none",
@@ -19,9 +21,13 @@ const linkStyle: React.CSSProperties = {
   gap: 4,
 };
 
-function ItemIcon({ url }: { url?: string | null }) {
+// `icon` (a tabler class like "ti-rocket") takes precedence over `url` (an uploaded image) when
+// both are set — a plain icon font glyph is the lighter-weight option for a menu row and is what
+// the block editor's own icon fields (BlockIcon) already prefer the same way.
+function ItemIcon({ icon, url }: { icon?: string | null; url?: string | null }) {
   return (
     <div
+      className="site-menu-item-icon"
       style={{
         width: 36,
         height: 36,
@@ -33,7 +39,9 @@ function ItemIcon({ url }: { url?: string | null }) {
         flexShrink: 0,
       }}
     >
-      {url ? (
+      {icon ? (
+        <i className={`ti ${icon}`} style={{ fontSize: 17, color: "var(--site-text-muted, #8A8C93)", transition: "color 180ms ease" }} />
+      ) : url ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={url} alt="" style={{ width: 20, height: 20, objectFit: "contain" }} />
       ) : (
@@ -65,7 +73,7 @@ function MegaPanel({ item }: { item: NavItem }) {
         zIndex: 30,
       }}
     >
-      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "2rem", display: "flex", gap: 40 }}>
+      <PageContainer style={{ padding: "2rem", display: "flex", gap: 40 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           {showTabs && (
             <div style={{ display: "flex", gap: 24, borderBottom: "0.5px solid #EAE8E1", marginBottom: 20 }}>
@@ -101,12 +109,14 @@ function MegaPanel({ item }: { item: NavItem }) {
               <Link
                 key={i}
                 href={menuItem.url}
-                className="site-hover-card"
+                className="site-menu-item"
                 style={{ display: "flex", gap: 12, textDecoration: "none", borderRadius: 10, padding: 6 }}
               >
-                <ItemIcon url={menuItem.icon_url} />
+                <ItemIcon icon={menuItem.icon} url={menuItem.icon_url} />
                 <div>
-                  <p style={{ margin: 0, fontSize: 14, fontWeight: 500, color: "var(--site-text, #17181C)" }}>{menuItem.title}</p>
+                  <p className="site-menu-item-title" style={{ margin: 0, fontSize: 14, fontWeight: 500, color: "var(--site-text, #17181C)", transition: "color 180ms ease" }}>
+                    {menuItem.title}
+                  </p>
                   {menuItem.description && (
                     <p style={{ margin: "2px 0 0", fontSize: 12.5, color: "var(--site-text-muted, #8A8C93)", lineHeight: 1.5 }}>
                       {menuItem.description}
@@ -123,6 +133,11 @@ function MegaPanel({ item }: { item: NavItem }) {
             <p style={{ margin: "0 0 14px", fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.4, color: "var(--site-text-muted, #8A8C93)" }}>
               {content.side_panel.title}
             </p>
+            {content.side_panel.text && (
+              <p style={{ margin: "-6px 0 14px", fontSize: 12.5, lineHeight: 1.5, color: "var(--site-text-muted, #8A8C93)" }}>
+                {content.side_panel.text}
+              </p>
+            )}
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               {content.side_panel.items.map((sideItem, i) => (
                 <Link
@@ -143,7 +158,7 @@ function MegaPanel({ item }: { item: NavItem }) {
             </div>
           </div>
         )}
-      </div>
+      </PageContainer>
     </div>
   );
 }
@@ -246,6 +261,11 @@ function MobileMenuItem({ item }: { item: NavItem }) {
               <p style={{ margin: "0 0 8px", fontSize: 11.5, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.4, color: "var(--site-text-muted, #8A8C93)" }}>
                 {content.side_panel.title}
               </p>
+              {content.side_panel.text && (
+                <p style={{ margin: "-4px 0 8px", fontSize: 12, lineHeight: 1.5, color: "var(--site-text-muted, #8A8C93)" }}>
+                  {content.side_panel.text}
+                </p>
+              )}
               <div style={{ display: "flex", flexDirection: "column", gap: 8, paddingLeft: 8 }}>
                 {content.side_panel.items.map((sideItem, i) => (
                   <Link key={i} href={sideItem.url} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--site-text, #17181C)", textDecoration: "none" }}>
@@ -296,12 +316,9 @@ export function NavMenu({
     if (closeTimer.current) clearTimeout(closeTimer.current);
   }
 
-  const navStyle: React.CSSProperties =
-    alignment === "center"
-      ? { display: "flex", alignItems: "center", gap: 24, flex: 1, justifyContent: "center" }
-      : alignment === "right"
-        ? { display: "flex", alignItems: "center", gap: 24, marginLeft: "auto" }
-        : { display: "flex", alignItems: "center", gap: 24 };
+  // Positioning (left/center/right) is now owned by the grid cell NavMenu renders into
+  // (see HeaderChrome.tsx) — this stays a plain row regardless of `alignment`.
+  const navStyle: React.CSSProperties = { display: "flex", alignItems: "center", gap: 24 };
 
   return (
     <>
@@ -310,16 +327,27 @@ export function NavMenu({
           const hasMenu = (item.menu_type === "dropdown" || item.menu_type === "mega_menu") && item.menu_content;
           if (!hasMenu) {
             return (
-              <Link key={item.id} href={item.url} style={linkStyle}>
+              <Link key={item.id} href={item.url} className="site-nav-link" style={linkStyle}>
                 {item.label}
               </Link>
             );
           }
           const isOpen = openId === item.id;
+          // Deliberately no `position` here: MegaPanel is `position:absolute; left:0; right:0`
+          // and needs to bind to the <header> (the nearest positioned ancestor once this stays
+          // static) to span the header's full width — giving this div its own position would
+          // shrink the panel down to this trigger's own width instead.
           return (
             <div key={item.id} onMouseEnter={() => { cancelClose(); setOpenId(item.id); }} onMouseLeave={scheduleClose}>
               <button
-                onClick={() => setOpenId(isOpen ? null : item.id)}
+                // Deliberately "ensure open", not "toggle": on a real mouse click the trigger's
+                // own onMouseEnter has already fired and opened it a moment earlier, so a naive
+                // isOpen-based toggle here immediately closed it again right after opening —
+                // clicking looked like it did nothing (or briefly flashed the panel shut).
+                // Closing is handled entirely by onMouseLeave's delayed close and the
+                // click-outside listener above, which also covers touch (no hover there).
+                onClick={() => setOpenId(item.id)}
+                className={`site-nav-link${isOpen ? " site-nav-link--open" : ""}`}
                 style={linkStyle}
                 aria-expanded={isOpen}
               >

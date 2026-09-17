@@ -35,7 +35,10 @@ export function CategoryAutocomplete({
         className={className}
       />
       {focused && matches.length > 0 && (
-        <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-lg border border-md-outline-variant bg-md-surface-container-high shadow-md">
+        <div
+          className="absolute z-10 mt-1 w-full overflow-hidden rounded-lg border border-md-outline-variant bg-md-surface-container-high"
+          style={{ boxShadow: "var(--md-elevation-3)" }}
+        >
           {matches.slice(0, 6).map((c) => (
             <button
               key={c}

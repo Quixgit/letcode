@@ -1,10 +1,12 @@
 import type { FeatureSection } from "@/lib/api";
+import { PageContainer } from "@/components/site/PageContainer";
 
 export function FeatureSections({ sections }: { sections: FeatureSection[] }) {
   if (sections.length === 0) return null;
 
   return (
-    <section style={{ padding: "0 2rem 4rem", maxWidth: 960, margin: "0 auto", display: "flex", flexDirection: "column", gap: 56 }}>
+    <section style={{ padding: "0 0 4rem" }}>
+      <PageContainer style={{ display: "flex", flexDirection: "column", gap: 56 }}>
       {sections.map((section, i) => (
         <div
           key={i}
@@ -31,6 +33,7 @@ export function FeatureSections({ sections }: { sections: FeatureSection[] }) {
           )}
         </div>
       ))}
+      </PageContainer>
     </section>
   );
 }

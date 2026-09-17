@@ -14,23 +14,36 @@ export function HowItWorksBlockEditor({ block, onChange }: { block: HowItWorksBl
 
   return (
     <div className="flex flex-col gap-2">
+      <p className="m-0 text-[11px] text-md-on-surface-variant">
+        Без описания — компактный ряд с точками (как сейчас). Если у хотя бы одного шага есть описание —
+        весь блок переключается на карточки с полным абзацем.
+      </p>
       {block.steps.map((step, i) => (
-        <div key={i} className="flex items-center gap-2">
-          <span className="w-5 text-center text-[12px] text-md-on-surface-variant">{i + 1}</span>
-          <IconField value={step} onChange={(icon) => update(i, icon)} />
-          <input
-            value={step.label}
-            onChange={(e) => update(i, { label: e.target.value })}
-            placeholder="Шаг"
-            className="block min-w-0 flex-1 rounded-md border border-md-outline-variant bg-transparent px-2.5 py-1.5 text-[13px] text-md-on-surface outline-none focus:border-md-outline"
+        <div key={i} className="flex flex-col gap-1.5 rounded-md border border-md-outline-variant p-2">
+          <div className="flex items-center gap-2">
+            <span className="w-5 text-center text-[12px] text-md-on-surface-variant">{i + 1}</span>
+            <IconField value={step} onChange={(icon) => update(i, icon)} />
+            <input
+              value={step.label}
+              onChange={(e) => update(i, { label: e.target.value })}
+              placeholder="Шаг"
+              className="block min-w-0 flex-1 rounded-md border border-md-outline-variant bg-transparent px-2.5 py-1.5 text-[13px] text-md-on-surface outline-none focus:border-md-outline"
+            />
+            <button
+              type="button"
+              onClick={() => onChange({ ...block, steps: block.steps.filter((_, idx) => idx !== i) })}
+              className="shrink-0 text-md-on-surface-variant hover:text-md-error"
+            >
+              <i className="ti ti-x text-sm" />
+            </button>
+          </div>
+          <textarea
+            value={step.description || ""}
+            onChange={(e) => update(i, { description: e.target.value || undefined })}
+            placeholder="Абзац описания (опционально — переключает вид на карточки)"
+            rows={2}
+            className="block w-full rounded-md border border-md-outline-variant bg-transparent px-2.5 py-1.5 text-[13px] text-md-on-surface outline-none focus:border-md-outline"
           />
-          <button
-            type="button"
-            onClick={() => onChange({ ...block, steps: block.steps.filter((_, idx) => idx !== i) })}
-            className="text-md-on-surface-variant hover:text-md-error"
-          >
-            <i className="ti ti-x text-sm" />
-          </button>
         </div>
       ))}
       {block.steps.length < 5 && (

@@ -15,17 +15,23 @@ import { EmptyState } from "@/components/admin/m3/EmptyState";
 import { ConfirmDialog } from "@/components/admin/ConfirmDialog";
 import { QuickEditRow } from "@/components/admin/QuickEditRow";
 import { FilterBar, FilterField, FilterInput, FilterSelect } from "@/components/admin/FilterBar";
+import { ReviewBadge } from "@/components/admin/ReviewBadge";
 import type { AppListItem, ContentStatus } from "@/lib/admin-types";
 
-const TABS: { label: string; value: ContentStatus | "all" }[] = [
+type TabValue = ContentStatus | "all" | "trash";
+
+const TABS: { label: string; value: TabValue }[] = [
   { label: "Все", value: "all" },
   { label: "Опубликовано", value: "published" },
   { label: "Черновики", value: "draft" },
   { label: "Архив", value: "archived" },
+  { label: "Корзина", value: "trash" },
 ];
 
-function initialTab(statusParam: string | null): ContentStatus | "all" {
-  return statusParam === "published" || statusParam === "draft" || statusParam === "archived" ? statusParam : "all";
+function initialTab(statusParam: string | null): TabValue {
+  return statusParam === "published" || statusParam === "draft" || statusParam === "archived" || statusParam === "trash"
+    ? statusParam
+    : "all";
 }
 
 interface AppFilter {
@@ -56,9 +62,10 @@ function AppsListPageInner() {
   const queryClient = useQueryClient();
   const { showToast } = useToast();
   const searchParams = useSearchParams();
-  const [tab, setTab] = useState<ContentStatus | "all">(() => initialTab(searchParams.get("status")));
+  const [tab, setTab] = useState<TabValue>(() => initialTab(searchParams.get("status")));
   const [selected, setSelected] = useState<string[]>([]);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  const [pendingPermanentDelete, setPendingPermanentDelete] = useState<AppListItem | null>(null);
   const [quickEditId, setQuickEditId] = useState<string | null>(null);
   const [filterDraft, setFilterDraft] = useState<AppFilter>(EMPTY_FILTER);
   const [filter, setFilter] = useState<AppFilter>(EMPTY_FILTER);
@@ -109,7 +116,26 @@ function AppsListPageInner() {
     onSuccess: () => {
       invalidate();
       setConfirmBulkDelete(false);
-      showToast("Удалено");
+      showToast("Перемещено в корзину");
+    },
+    onError: (err: Error) => showToast(err.message, "error"),
+  });
+
+  const restoreMutation = useMutation({
+    mutationFn: (id: string) => adminFetch(`api/apps/${id}/restore`, { method: "POST" }),
+    onSuccess: () => {
+      invalidate();
+      showToast("Восстановлено");
+    },
+    onError: (err: Error) => showToast(err.message, "error"),
+  });
+
+  const permanentDeleteMutation = useMutation({
+    mutationFn: (id: string) => adminFetch(`api/apps/${id}/permanent`, { method: "DELETE" }),
+    onSuccess: () => {
+      invalidate();
+      setPendingPermanentDelete(null);
+      showToast("Удалено безвозвратно");
     },
     onError: (err: Error) => showToast(err.message, "error"),
   });
@@ -187,16 +213,20 @@ function AppsListPageInner() {
       {apps.length === 0 && !isLoading && hasActiveFilters ? (
         <p className="md-body-medium text-md-on-surface-variant">Ничего не найдено по текущим фильтрам.</p>
       ) : apps.length === 0 && !isLoading ? (
-        <EmptyState
-          icon="ti-app-window"
-          title="Приложений пока нет"
-          description="Добавьте первое приложение из вашего портфолио — иконка, описание, скриншоты и магазины появятся на его публичной странице."
-          actionLabel={canEdit ? "+ Новое приложение" : undefined}
-          actionHref={canEdit ? "/admin/apps/new" : undefined}
-        />
+        tab === "trash" ? (
+          <EmptyState icon="ti-trash" title="Корзина пуста" description="Удалённые приложения появятся здесь." />
+        ) : (
+          <EmptyState
+            icon="ti-app-window"
+            title="Приложений пока нет"
+            description="Добавьте первое приложение из вашего портфолио — иконка, описание, скриншоты и магазины появятся на его публичной странице."
+            actionLabel={canEdit ? "+ Новое приложение" : undefined}
+            actionHref={canEdit ? "/admin/apps/new" : undefined}
+          />
+        )
       ) : (
         <Card elevation={1} className="overflow-hidden">
-          {canEdit && apps.length > 0 && (
+          {canEdit && apps.length > 0 && tab !== "trash" && (
             <div className="flex items-center gap-3 border-b border-md-outline-variant px-4 py-2">
               <input
                 type="checkbox"
@@ -207,7 +237,34 @@ function AppsListPageInner() {
             </div>
           )}
           {apps.map((app) =>
-            quickEditId === app.id ? (
+            tab === "trash" ? (
+              <div
+                key={app.id}
+                className="flex items-center gap-3 border-b border-md-outline-variant px-4 py-3 last:border-0"
+              >
+                <div className="flex-1">
+                  <p className="md-body-medium m-0 text-md-on-surface">{app.name}</p>
+                  <p className="md-body-small m-0 text-md-on-surface-variant">/{app.slug}</p>
+                </div>
+                {canEdit && (
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => restoreMutation.mutate(app.id)}
+                      className="md-body-small text-md-primary hover:underline"
+                    >
+                      Восстановить
+                    </button>
+                    <button
+                      onClick={() => setPendingPermanentDelete(app)}
+                      className="text-md-on-surface-variant hover:text-md-error"
+                      title="Удалить навсегда"
+                    >
+                      <i className="ti ti-trash-x text-sm" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : quickEditId === app.id ? (
               <QuickEditRow
                 key={app.id}
                 titleLabel="Название"
@@ -250,6 +307,7 @@ function AppsListPageInner() {
                     <span className="md-body-small text-md-on-surface-variant">
                       {app.updated_at ? new Date(app.updated_at).toLocaleDateString("ru-RU") : ""}
                     </span>
+                    <ReviewBadge status={app.review_status} />
                     <StatusBadge status={app.status} />
                   </div>
                 </Link>
@@ -261,10 +319,18 @@ function AppsListPageInner() {
 
       <ConfirmDialog
         open={confirmBulkDelete}
-        title={`Удалить ${selected.length} приложени${selected.length === 1 ? "е" : "я"}?`}
+        title={`Переместить в корзину ${selected.length} приложени${selected.length === 1 ? "е" : "я"}?`}
         confirmLabel="Удалить"
         onConfirm={() => bulkDeleteMutation.mutate(selected)}
         onCancel={() => setConfirmBulkDelete(false)}
+      />
+      <ConfirmDialog
+        open={!!pendingPermanentDelete}
+        title={`Удалить «${pendingPermanentDelete?.name}» безвозвратно?`}
+        description="Это действие нельзя отменить."
+        confirmLabel="Удалить навсегда"
+        onConfirm={() => pendingPermanentDelete && permanentDeleteMutation.mutate(pendingPermanentDelete.id)}
+        onCancel={() => setPendingPermanentDelete(null)}
       />
     </div>
   );

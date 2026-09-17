@@ -5,11 +5,13 @@ import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { adminFetch } from "@/lib/admin-api";
 import { useToast } from "@/lib/toast";
-import { useCanEdit } from "@/lib/role-context";
+import { useCanEdit, useIsAdmin } from "@/lib/role-context";
 import { AppForm, type AppFormValues } from "@/components/admin/AppForm";
 import { StatusBadge } from "@/components/admin/StatusBadge";
 import { ConfirmDialog } from "@/components/admin/ConfirmDialog";
 import { PublishControl } from "@/components/admin/PublishControl";
+import { ReviewActions } from "@/components/admin/ReviewActions";
+import { ReviewNoteCallout } from "@/components/admin/ReviewBadge";
 import { Breadcrumbs } from "@/components/admin/m3/Breadcrumbs";
 import type { AppDetail, MediaItem } from "@/lib/admin-types";
 
@@ -32,6 +34,9 @@ function toBody(values: AppFormValues) {
     meta_title: values.meta_title || null,
     meta_description: values.meta_description || null,
     og_image_url: values.og_image_url || null,
+    canonical_url: values.canonical_url || null,
+    noindex: values.noindex,
+    structured_data: values.structured_data.trim() ? JSON.parse(values.structured_data) : null,
     show_on_homepage: values.show_on_homepage,
     hero_image_media_id: values.hero_image_media_id || null,
     rating: values.rating.trim() !== "" ? Number(values.rating) : null,
@@ -47,6 +52,7 @@ export default function EditAppPage({ params }: { params: Promise<{ id: string }
   const queryClient = useQueryClient();
   const { showToast } = useToast();
   const canEdit = useCanEdit();
+  const isAdmin = useIsAdmin();
   const [pendingDelete, setPendingDelete] = useState(false);
 
   const { data: app, isLoading } = useQuery({
@@ -115,8 +121,27 @@ export default function EditAppPage({ params }: { params: Promise<{ id: string }
     mutationFn: () => adminFetch(`api/apps/${id}`, { method: "DELETE" }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["apps"] });
-      showToast("Приложение удалено");
+      showToast("Приложение перемещено в корзину");
       router.push("/admin/apps");
+    },
+    onError: (err: Error) => showToast(err.message, "error"),
+  });
+
+  const submitReviewMutation = useMutation({
+    mutationFn: (note: string) => adminFetch(`api/apps/${id}/submit-review`, { method: "POST", body: { note } }),
+    onSuccess: () => {
+      invalidate();
+      showToast("Отправлено на проверку");
+    },
+    onError: (err: Error) => showToast(err.message, "error"),
+  });
+
+  const reviewDecisionMutation = useMutation({
+    mutationFn: (body: { decision: string; note: string }) =>
+      adminFetch(`api/apps/${id}/review-decision`, { method: "POST", body }),
+    onSuccess: () => {
+      invalidate();
+      showToast("Решение сохранено");
     },
     onError: (err: Error) => showToast(err.message, "error"),
   });
@@ -134,6 +159,15 @@ export default function EditAppPage({ params }: { params: Promise<{ id: string }
         </div>
         {canEdit && (
           <div className="flex items-center gap-2">
+            <ReviewActions
+              reviewStatus={app.review_status}
+              isAdmin={isAdmin}
+              canEdit={canEdit}
+              submitting={submitReviewMutation.isPending || reviewDecisionMutation.isPending}
+              onSubmitReview={(note) => submitReviewMutation.mutate(note)}
+              onApprove={() => reviewDecisionMutation.mutate({ decision: "approved", note: "" })}
+              onRequestChanges={(note) => reviewDecisionMutation.mutate({ decision: "changes_requested", note })}
+            />
             <PublishControl
               status={app.status}
               scheduledPublishAt={app.scheduled_publish_at}
@@ -156,6 +190,7 @@ export default function EditAppPage({ params }: { params: Promise<{ id: string }
       </div>
 
       <div className="flex flex-col gap-6">
+        <ReviewNoteCallout status={app.review_status} note={app.review_note} />
         <AppForm
           key={app.id}
           initial={app}

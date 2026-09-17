@@ -17,7 +17,7 @@ export default function RedirectsPage() {
   const { showToast } = useToast();
   const canEdit = useCanEdit();
   const [pendingDelete, setPendingDelete] = useState<RedirectItem | null>(null);
-  const [form, setForm] = useState({ from_path: "", to_path: "", status_code: 301 });
+  const [form, setForm] = useState({ from_path: "", to_path: "", status_code: 301, is_regex: false });
 
   const { data: redirects, isLoading } = useQuery({
     queryKey: ["redirects"],
@@ -28,10 +28,11 @@ export default function RedirectsPage() {
     mutationFn: () => adminFetch("api/redirects", { method: "POST", body: form }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["redirects"] });
-      setForm({ from_path: "", to_path: "", status_code: 301 });
+      setForm({ from_path: "", to_path: "", status_code: 301, is_regex: false });
       showToast("Редирект добавлен");
     },
-    onError: (err: Error) => showToast(err.message, "error"),
+    onError: (err: Error) =>
+      showToast(err.message.includes("redirect_loop") ? "Такой редирект создаёт петлю" : err.message, "error"),
   });
 
   const deleteMutation = useMutation({
@@ -59,33 +60,43 @@ export default function RedirectsPage() {
 
       {canEdit && (
         <Card elevation={1} outlined className="mb-6 p-4">
-          <form onSubmit={handleSubmit} className="flex items-end gap-3">
-            <TextField
-              label="Откуда"
-              value={form.from_path}
-              onChange={(e) => setForm({ ...form, from_path: e.target.value })}
-              containerClassName="flex-1"
-            />
-            <TextField
-              label="Куда"
-              value={form.to_path}
-              onChange={(e) => setForm({ ...form, to_path: e.target.value })}
-              containerClassName="flex-1"
-            />
-            <label className="md-body-small w-24 text-md-on-surface-variant">
-              Код
-              <select
-                value={form.status_code}
-                onChange={(e) => setForm({ ...form, status_code: Number(e.target.value) })}
-                className="mt-1.5 block w-full rounded-lg border border-md-outline-variant bg-transparent px-2.5 py-1.5 text-sm text-md-on-surface outline-none focus:border-md-primary"
-              >
-                <option value={301}>301</option>
-                <option value={302}>302</option>
-              </select>
+          <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+            <div className="flex items-end gap-3">
+              <TextField
+                label="Откуда"
+                value={form.from_path}
+                onChange={(e) => setForm({ ...form, from_path: e.target.value })}
+                containerClassName="flex-1"
+              />
+              <TextField
+                label="Куда"
+                value={form.to_path}
+                onChange={(e) => setForm({ ...form, to_path: e.target.value })}
+                containerClassName="flex-1"
+              />
+              <label className="md-body-small w-24 text-md-on-surface-variant">
+                Код
+                <select
+                  value={form.status_code}
+                  onChange={(e) => setForm({ ...form, status_code: Number(e.target.value) })}
+                  className="mt-1.5 block w-full rounded-lg border border-md-outline-variant bg-transparent px-2.5 py-1.5 text-sm text-md-on-surface outline-none focus:border-md-primary"
+                >
+                  <option value={301}>301</option>
+                  <option value={302}>302</option>
+                </select>
+              </label>
+              <Button type="submit" disabled={createMutation.isPending}>
+                Добавить
+              </Button>
+            </div>
+            <label className="flex items-center gap-2 text-[13px] text-md-on-surface-variant">
+              <input
+                type="checkbox"
+                checked={form.is_regex}
+                onChange={(e) => setForm({ ...form, is_regex: e.target.checked })}
+              />
+              Regex / wildcard (например «/old/(.*)» → «/new/$1»)
             </label>
-            <Button type="submit" disabled={createMutation.isPending}>
-              Добавить
-            </Button>
           </form>
         </Card>
       )}
@@ -107,6 +118,11 @@ export default function RedirectsPage() {
             >
               <span className="text-md-on-surface">
                 {r.from_path} <i className="ti ti-arrow-right mx-1 text-md-on-surface-variant" /> {r.to_path}
+                {r.is_regex && (
+                  <span className="ml-2 rounded bg-md-surface-container-high px-1.5 py-0.5 text-[11px] text-md-on-surface-variant">
+                    regex
+                  </span>
+                )}
               </span>
               <div className="flex items-center gap-3">
                 <span className="text-md-on-surface-variant">{r.status_code}</span>

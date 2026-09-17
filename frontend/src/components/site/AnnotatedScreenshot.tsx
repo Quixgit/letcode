@@ -1,4 +1,5 @@
 import { SmoothStatChart } from "@/components/site/SmoothStatChart";
+import { PageContainer } from "@/components/site/PageContainer";
 
 function DarkMockupFallback() {
   return (
@@ -69,8 +70,8 @@ export function AnnotatedScreenshot({
   const right = annotations.filter((a) => a.side === "right");
 
   return (
-    <section style={{ padding: "0 2rem 4rem", maxWidth: 1000, margin: "0 auto" }}>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr minmax(240px, 420px) 1fr", alignItems: "center", gap: 0 }}>
+    <section style={{ padding: "0 0 4rem" }}>
+      <PageContainer style={{ display: "grid", gridTemplateColumns: "1fr minmax(240px, 420px) 1fr", alignItems: "center", gap: 0 }}>
         <div style={{ position: "relative", height: 280 }}>
           {left.map((a, i) => (
             <div key={i} style={{ position: "absolute", right: 0, top: `${a.y_percent}%`, transform: "translateY(-50%)" }}>
@@ -104,7 +105,7 @@ export function AnnotatedScreenshot({
             </div>
           ))}
         </div>
-      </div>
+      </PageContainer>
     </section>
   );
 }

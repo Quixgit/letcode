@@ -5,12 +5,14 @@ import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { adminFetch } from "@/lib/admin-api";
 import { useToast } from "@/lib/toast";
-import { useCanEdit } from "@/lib/role-context";
+import { useCanEdit, useIsAdmin } from "@/lib/role-context";
 import { PageForm, type PageFormValues } from "@/components/admin/PageForm";
 import { RevisionsPanel } from "@/components/admin/RevisionsPanel";
 import { StatusBadge } from "@/components/admin/StatusBadge";
 import { ConfirmDialog } from "@/components/admin/ConfirmDialog";
 import { PublishControl } from "@/components/admin/PublishControl";
+import { ReviewActions } from "@/components/admin/ReviewActions";
+import { ReviewNoteCallout } from "@/components/admin/ReviewBadge";
 import { Breadcrumbs } from "@/components/admin/m3/Breadcrumbs";
 import type { PageDetail } from "@/lib/admin-types";
 
@@ -20,6 +22,7 @@ export default function EditPagePage({ params }: { params: Promise<{ id: string 
   const queryClient = useQueryClient();
   const { showToast } = useToast();
   const canEdit = useCanEdit();
+  const isAdmin = useIsAdmin();
   const [pendingDelete, setPendingDelete] = useState(false);
 
   const { data: page, isLoading } = useQuery({
@@ -98,8 +101,27 @@ export default function EditPagePage({ params }: { params: Promise<{ id: string 
     mutationFn: () => adminFetch(`api/pages/${id}`, { method: "DELETE" }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["pages"] });
-      showToast("Страница удалена");
+      showToast("Страница перемещена в корзину");
       router.push("/admin/pages");
+    },
+    onError: (err: Error) => showToast(err.message, "error"),
+  });
+
+  const submitReviewMutation = useMutation({
+    mutationFn: (note: string) => adminFetch(`api/pages/${id}/submit-review`, { method: "POST", body: { note } }),
+    onSuccess: () => {
+      invalidate();
+      showToast("Отправлено на проверку");
+    },
+    onError: (err: Error) => showToast(err.message, "error"),
+  });
+
+  const reviewDecisionMutation = useMutation({
+    mutationFn: (body: { decision: string; note: string }) =>
+      adminFetch(`api/pages/${id}/review-decision`, { method: "POST", body }),
+    onSuccess: () => {
+      invalidate();
+      showToast("Решение сохранено");
     },
     onError: (err: Error) => showToast(err.message, "error"),
   });
@@ -117,6 +139,15 @@ export default function EditPagePage({ params }: { params: Promise<{ id: string 
         </div>
         {canEdit && (
           <div className="flex items-center gap-2">
+            <ReviewActions
+              reviewStatus={page.review_status}
+              isAdmin={isAdmin}
+              canEdit={canEdit}
+              submitting={submitReviewMutation.isPending || reviewDecisionMutation.isPending}
+              onSubmitReview={(note) => submitReviewMutation.mutate(note)}
+              onApprove={() => reviewDecisionMutation.mutate({ decision: "approved", note: "" })}
+              onRequestChanges={(note) => reviewDecisionMutation.mutate({ decision: "changes_requested", note })}
+            />
             <a
               href={`/preview/pages/${page.id}`}
               target="_blank"
@@ -147,6 +178,7 @@ export default function EditPagePage({ params }: { params: Promise<{ id: string 
       </div>
 
       <div className="flex flex-col gap-6">
+        <ReviewNoteCallout status={page.review_status} note={page.review_note} />
         <PageForm
           key={page.id}
           initial={page}

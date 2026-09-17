@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import { logoutAction } from "@/app/admin/actions";
+import { adminFetch } from "@/lib/admin-api";
 import { useCurrentUser } from "@/lib/role-context";
 import { useAdminTheme } from "@/lib/admin-theme";
 
@@ -13,7 +15,10 @@ interface NavEntry {
   exact?: boolean;
 }
 
-const TOP_ITEM: NavEntry = { href: "/admin", label: "Дашборд", icon: "ti-layout-dashboard", exact: true };
+const TOP_ITEMS: NavEntry[] = [
+  { href: "/admin", label: "Дашборд", icon: "ti-layout-dashboard", exact: true },
+  { href: "/admin/help", label: "Помощь", icon: "ti-help-circle" },
+];
 
 interface NavGroup {
   label: string;
@@ -36,12 +41,14 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/admin/homepage", label: "Главная страница", icon: "ti-home" },
       { href: "/admin/templates", label: "Шаблоны", icon: "ti-layout-grid" },
       { href: "/admin/navigation", label: "Навигация", icon: "ti-menu-2" },
+      { href: "/admin/seo", label: "SEO", icon: "ti-search" },
       { href: "/admin/settings", label: "Настройки", icon: "ti-settings" },
     ],
   },
   {
     label: "Система",
     items: [
+      { href: "/admin/submissions", label: "Заявки", icon: "ti-inbox" },
       { href: "/admin/redirects", label: "Редиректы", icon: "ti-arrow-forward-up" },
       { href: "/admin/audit-log", label: "Журнал аудита", icon: "ti-history" },
     ],
@@ -64,20 +71,35 @@ export function Sidebar() {
 
   const groups = navGroups(user?.role === "admin");
 
+  // Polled, not just fetched once: this is the one nav item where "new since I last looked"
+  // actually matters (a lead sitting unseen is the whole reason this page exists) — a 60s
+  // interval is enough to feel current without hammering the endpoint from every admin screen.
+  const { data: unread } = useQuery({
+    queryKey: ["submissions-unread-count"],
+    queryFn: () => adminFetch<{ count: number }>("api/submissions/unread-count"),
+    refetchInterval: 60_000,
+  });
+
   function renderItem(item: NavEntry) {
     const active = item.exact ? pathname === item.href : pathname.startsWith(item.href);
+    const badge = item.href === "/admin/submissions" ? unread?.count : undefined;
     return (
       <Link
         key={item.href}
         href={item.href}
         className={`md-motion md-label-large flex items-center gap-2.5 rounded-lg border-l-[3px] px-3 py-2 ${
           active
-            ? "border-md-primary bg-md-secondary-container font-medium text-md-on-secondary-container"
+            ? "border-md-accent bg-md-accent-container font-medium text-md-on-accent-container"
             : "border-transparent text-md-on-surface-variant hover:bg-md-surface-container-high hover:text-md-on-surface"
         }`}
       >
         <i className={`ti ${item.icon} text-base`} />
         {item.label}
+        {!!badge && (
+          <span className="ml-auto flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-md-error px-1 text-[10px] font-medium text-md-on-error">
+            {badge}
+          </span>
+        )}
       </Link>
     );
   }
@@ -93,7 +115,7 @@ export function Sidebar() {
         </div>
 
         <nav className="flex flex-col gap-0.5 px-3">
-          {renderItem(TOP_ITEM)}
+          {TOP_ITEMS.map(renderItem)}
 
           {groups.map((group) => (
             <div key={group.label} className="mt-3 flex flex-col gap-0.5">

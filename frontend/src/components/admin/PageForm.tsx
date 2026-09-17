@@ -4,6 +4,7 @@ import { useState } from "react";
 import { MediaPicker } from "@/components/admin/MediaPicker";
 import { CharCounter } from "@/components/admin/CharCounter";
 import { SeoPreview } from "@/components/admin/SeoPreview";
+import { SeoChecklist } from "@/components/admin/SeoChecklist";
 import { TemplatePicker } from "@/components/admin/TemplatePicker";
 import { BlockEditor } from "@/components/admin/BlockEditor";
 import { useSaveShortcut, useUnsavedChangesWarning } from "@/lib/use-form-shortcuts";
@@ -198,6 +199,15 @@ export function PageForm({ initial, submitting, submitLabel, onSubmit }: PageFor
               image={values.og_image_url}
             />
           </div>
+
+          <SeoChecklist
+            title={values.title}
+            metaTitle={values.meta_title}
+            metaDescription={values.meta_description}
+            slug={values.slug}
+            hasOgImage={!!values.og_image_url}
+            noindex={values.noindex}
+          />
         </div>
       </fieldset>
 
@@ -222,10 +232,15 @@ export function PageForm({ initial, submitting, submitLabel, onSubmit }: PageFor
 }
 
 function Field({ label, children }: { label: React.ReactNode; children: React.ReactNode }) {
+  // Deliberately a <div>, not a <label>: a native <label> forwards any click within its bounds
+  // to the first labelable descendant (input/button/etc). Several fields here nest interactive
+  // widgets (BlockEditor's palette buttons, MediaPicker's "Выбрать изображение" button, ...), so a
+  // <label> wrapper caused clicks anywhere in the field to silently re-trigger that first control
+  // — most visibly, clicking anywhere under "Содержимое" kept adding a new block to the end.
   return (
-    <label className="block text-[13px] text-md-on-surface-variant">
+    <div className="block text-[13px] text-md-on-surface-variant">
       {label}
       <div className="mt-1.5">{children}</div>
-    </label>
+    </div>
   );
 }

@@ -1,7 +1,9 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { getPublicBlogPosts, getPublicSettings } from "@/lib/api";
-import { BlogCoverArt } from "@/components/site/BlogCoverArt";
+import { BlogCard } from "@/components/site/BlogCard";
+import { Breadcrumbs } from "@/components/site/Breadcrumbs";
+import { PageContainer } from "@/components/site/PageContainer";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +12,6 @@ export const metadata: Metadata = {
   description: "Updates, notes, and behind-the-scenes from lecode.",
   alternates: {
     canonical: "https://lecode.tech/blog",
-    types: { "application/rss+xml": "https://lecode.tech/blog/feed.xml" },
   },
 };
 
@@ -25,7 +26,9 @@ export default async function BlogIndexPage({ searchParams }: Props) {
   const allTags = Array.from(new Set(posts.flatMap((p) => p.tags))).sort();
 
   return (
-    <div style={{ maxWidth: columns === 1 ? 720 : 1100, margin: "0 auto", padding: "3rem 2rem" }}>
+    <div>
+      <Breadcrumbs items={[{ label: "Home", href: "/" }, { label: "Blog" }]} />
+      <PageContainer style={{ padding: "1.25rem 2rem 3rem" }}>
       <h1 style={{ fontSize: 30, fontWeight: 500, color: "#17181C", margin: "0 0 8px" }}>Blog</h1>
       <p style={{ fontSize: 14, color: "#8A8C93", margin: "0 0 24px" }}>
         Updates, notes, and behind-the-scenes from lecode.
@@ -75,31 +78,7 @@ export default async function BlogIndexPage({ searchParams }: Props) {
         }}
       >
         {posts.map((post) => (
-          <Link
-            key={post.id}
-            href={`/blog/${post.slug}`}
-            className="site-hover-card"
-            style={{ textDecoration: "none", display: "block", borderRadius: 12 }}
-          >
-            {post.cover_image_url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={post.cover_image_url}
-                alt=""
-                style={{ width: "100%", height: columns === 1 ? 220 : 160, objectFit: "cover", borderRadius: 12, marginBottom: 12 }}
-              />
-            ) : (
-              <div style={{ marginBottom: 12 }}>
-                <BlogCoverArt tags={post.tags} height={columns === 1 ? 220 : 160} />
-              </div>
-            )}
-            <p style={{ fontSize: 12, color: "#8A8C93", margin: "0 0 4px" }}>
-              {post.published_at ? new Date(post.published_at).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }) : ""}
-              {post.author_email ? ` · ${post.author_email}` : ""}
-            </p>
-            <p style={{ fontSize: 20, fontWeight: 500, color: "#17181C", margin: "0 0 6px" }}>{post.title}</p>
-            {post.excerpt && <p style={{ fontSize: 14, color: "#8A8C93", margin: 0, lineHeight: 1.7 }}>{post.excerpt}</p>}
-          </Link>
+          <BlogCard key={post.id} post={post} imageHeight={columns === 1 ? 220 : 160} />
         ))}
       </div>
 
@@ -113,6 +92,7 @@ export default async function BlogIndexPage({ searchParams }: Props) {
           </Link>
         </div>
       )}
+      </PageContainer>
     </div>
   );
 }

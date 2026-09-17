@@ -44,6 +44,10 @@ type Page struct {
 	UpdatedBy          *string    `json:"updated_by,omitempty"`
 	PublishedAt        *time.Time `json:"published_at,omitempty"`
 	ScheduledPublishAt *time.Time `json:"scheduled_publish_at,omitempty"`
+	DeletedAt          *time.Time `json:"deleted_at,omitempty"`
+	ReviewStatus       string     `json:"review_status"`
+	ReviewNote         *string    `json:"review_note,omitempty"`
+	ReviewRequestedBy  *string    `json:"review_requested_by,omitempty"`
 	CreatedAt          time.Time  `json:"created_at"`
 	UpdatedAt          time.Time  `json:"updated_at"`
 }

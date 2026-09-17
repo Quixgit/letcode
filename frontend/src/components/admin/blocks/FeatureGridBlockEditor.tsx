@@ -17,6 +17,19 @@ export function FeatureGridBlockEditor({ block, onChange }: { block: FeatureGrid
 
   return (
     <div className="flex flex-col gap-3">
+      <input
+        value={block.heading || ""}
+        onChange={(e) => onChange({ ...block, heading: e.target.value })}
+        placeholder="Заголовок секции (опционально)"
+        className={inputClass}
+      />
+      <textarea
+        value={block.description || ""}
+        onChange={(e) => onChange({ ...block, description: e.target.value })}
+        placeholder="Описание (опционально)"
+        rows={2}
+        className={inputClass}
+      />
       <div className="flex items-center gap-2">
         <span className="text-[12px] text-md-on-surface-variant">Колонок:</span>
         {[2, 3].map((n) => (

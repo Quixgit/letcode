@@ -1,7 +1,18 @@
-export function TemplateLanding({ title, children }: { title: string; children: React.ReactNode }) {
+import { Breadcrumbs, type BreadcrumbItem } from "@/components/site/Breadcrumbs";
+
+export function TemplateLanding({
+  title,
+  breadcrumbs,
+  children,
+}: {
+  title: string;
+  breadcrumbs?: BreadcrumbItem[];
+  children: React.ReactNode;
+}) {
   return (
     <div>
-      <div style={{ textAlign: "center", padding: "4rem 2rem 2rem" }}>
+      {breadcrumbs && <Breadcrumbs items={breadcrumbs} maxWidth="none" />}
+      <div style={{ textAlign: "center", padding: breadcrumbs ? "1.5rem 2rem 2rem" : "4rem 2rem 2rem" }}>
         <h1
           style={{
             fontSize: 40,
@@ -15,7 +26,9 @@ export function TemplateLanding({ title, children }: { title: string; children: 
           {title}
         </h1>
       </div>
-      <div style={{ maxWidth: 900, margin: "0 auto", padding: "0 2rem 4rem" }}>{children}</div>
+      {/* `children` is BlockRenderer output — every block type contains itself, so no extra
+          wrapper here (would double the side padding on top of each block's own). */}
+      {children}
     </div>
   );
 }

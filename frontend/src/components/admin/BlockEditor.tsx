@@ -35,6 +35,18 @@ import { AppMockupPanelBlockEditor } from "@/components/admin/blocks/AppMockupPa
 import { AnnotatedScreenshotBlockEditor } from "@/components/admin/blocks/AnnotatedScreenshotBlockEditor";
 import { CategoryPreviewRowBlockEditor } from "@/components/admin/blocks/CategoryPreviewRowBlockEditor";
 import { SectionLabelBlockEditor } from "@/components/admin/blocks/SectionLabelBlockEditor";
+import { HeroSliderBlockEditor } from "@/components/admin/blocks/HeroSliderBlockEditor";
+import { PlatformGridBlockEditor } from "@/components/admin/blocks/PlatformGridBlockEditor";
+import { FaqAccordionBlockEditor } from "@/components/admin/blocks/FaqAccordionBlockEditor";
+import { WhyChooseUsBlockEditor } from "@/components/admin/blocks/WhyChooseUsBlockEditor";
+import { HeroSplitDiagramBlockEditor } from "@/components/admin/blocks/HeroSplitDiagramBlockEditor";
+import { CoreServicesGridBlockEditor } from "@/components/admin/blocks/CoreServicesGridBlockEditor";
+import { LogoMarqueeBlockEditor } from "@/components/admin/blocks/LogoMarqueeBlockEditor";
+import { ContactFormBlockEditor } from "@/components/admin/blocks/ContactFormBlockEditor";
+import { ServiceHeroBannerBlockEditor } from "@/components/admin/blocks/ServiceHeroBannerBlockEditor";
+import { LifecycleFeatureListBlockEditor } from "@/components/admin/blocks/LifecycleFeatureListBlockEditor";
+import { ChallengeSolutionGridBlockEditor } from "@/components/admin/blocks/ChallengeSolutionGridBlockEditor";
+import { RelatedServicesGridBlockEditor } from "@/components/admin/blocks/RelatedServicesGridBlockEditor";
 import { RichTextEditor } from "@/components/admin/RichTextEditor";
 
 type Block = PublicPageBlock;
@@ -54,12 +66,25 @@ const TYPE_LABELS: Record<Block["type"], string> = {
   how_it_works: "Как это работает",
   testimonials_carousel: "Карусель отзывов",
   apps_showcase: "Витрина приложений",
+  blog_showcase: "Витрина блога",
   cta_banner: "CTA-баннер",
   app_mockup_panel: "Витрина мокапов",
   annotated_screenshot: "Скриншот с подписями",
   category_preview_row: "Ряд категорий",
   progress_dots: "Точки прогресса",
   section_label: "Заголовок секции (кикер)",
+  hero_slider: "Слайдер (hero)",
+  platform_grid: "Сетка платформ",
+  faq_accordion: "FAQ (аккордеон)",
+  why_choose_us: "Why Choose Us",
+  hero_split_diagram: "Hero (split + диаграмма)",
+  core_services_grid: "Сетка услуг (Core Services)",
+  logo_marquee: "Бегущая строка логотипов",
+  contact_form: "Форма обратной связи",
+  service_hero_banner: "Hero услуги (баннер)",
+  lifecycle_feature_list: "Список по фазам (What's Included)",
+  challenge_solution_grid: "Проблема → решение",
+  related_services_grid: "Похожие услуги",
 };
 
 const TYPE_ICONS: Partial<Record<Block["type"], string>> = {
@@ -72,18 +97,39 @@ const TYPE_ICONS: Partial<Record<Block["type"], string>> = {
   how_it_works: "ti-list-numbers",
   testimonials_carousel: "ti-quote",
   apps_showcase: "ti-apps",
+  blog_showcase: "ti-news",
   cta_banner: "ti-speakerphone",
   app_mockup_panel: "ti-device-mobile",
   annotated_screenshot: "ti-message-2",
   category_preview_row: "ti-layout-cards",
   progress_dots: "ti-point",
   section_label: "ti-heading",
+  hero_slider: "ti-slideshow",
+  platform_grid: "ti-cloud",
+  faq_accordion: "ti-help-circle",
+  why_choose_us: "ti-award",
+  hero_split_diagram: "ti-layout-sidebar",
+  core_services_grid: "ti-layout-grid-add",
+  logo_marquee: "ti-carousel-horizontal",
+  contact_form: "ti-mail",
+  service_hero_banner: "ti-layout-navbar",
+  lifecycle_feature_list: "ti-list-check",
+  challenge_solution_grid: "ti-bulb",
+  related_services_grid: "ti-apps",
 };
 
 // Content block types addable from the palette — both at the top level (as a full-width row)
 // and inside a column. "columns" itself is only offered as a row layout preset (see ROW_PRESETS)
 // to avoid rows nested inside columns.
 const PALETTE_TYPES: Block["type"][] = [
+  "service_hero_banner",
+  "hero_split_diagram",
+  "hero_slider",
+  "core_services_grid",
+  "logo_marquee",
+  "platform_grid",
+  "faq_accordion",
+  "why_choose_us",
   "richtext",
   "section_label",
   "image",
@@ -94,11 +140,16 @@ const PALETTE_TYPES: Block["type"][] = [
   "how_it_works",
   "testimonials_carousel",
   "apps_showcase",
+  "blog_showcase",
   "cta_banner",
   "app_mockup_panel",
   "annotated_screenshot",
   "category_preview_row",
   "progress_dots",
+  "contact_form",
+  "lifecycle_feature_list",
+  "challenge_solution_grid",
+  "related_services_grid",
 ];
 
 const ROW_PRESETS = [1, 2, 3, 4];
@@ -133,6 +184,8 @@ function defaultBlockFor(type: Block["type"]): Block {
       return { type: "testimonials_carousel" };
     case "apps_showcase":
       return { type: "apps_showcase" };
+    case "blog_showcase":
+      return { type: "blog_showcase", count: 3 };
     case "cta_banner":
       return { type: "cta_banner", title: "", button_label: "", button_url: "" };
     case "app_mockup_panel":
@@ -145,6 +198,51 @@ function defaultBlockFor(type: Block["type"]): Block {
       return { type: "progress_dots" };
     case "section_label":
       return { type: "section_label", text: "" };
+    case "hero_slider":
+      return { type: "hero_slider", interval_ms: 5000, slides: [] };
+    case "platform_grid":
+      return { type: "platform_grid", heading: "Platforms We Support", description: "", items: [] };
+    case "faq_accordion":
+      return { type: "faq_accordion", heading: "Frequently Asked Questions", description: "", columns: 2, items: [] };
+    case "why_choose_us":
+      return { type: "why_choose_us", heading: "Why Choose Us", description: "", items: [] };
+    case "hero_split_diagram":
+      return { type: "hero_split_diagram", diagram: { groups: [] } };
+    case "core_services_grid":
+      return { type: "core_services_grid", heading: "Our Core Services", description: "", items: [] };
+    case "logo_marquee":
+      return { type: "logo_marquee", heading: "", items: [], speed: "medium", pause_on_hover: true };
+    case "contact_form":
+      return {
+        type: "contact_form",
+        form_key: `contact-${Date.now().toString(36)}`,
+        title: "Свяжитесь с нами",
+        description: "Оставьте контакты, и мы ответим в течение рабочего дня.",
+        fields: [
+          { key: "name", label: "Имя", type: "text", required: true },
+          { key: "email", label: "Email", type: "email", required: true },
+          { key: "message", label: "Сообщение", type: "textarea", required: true },
+        ],
+        submit_label: "Отправить",
+        success_message: "Спасибо! Мы получили сообщение и скоро ответим.",
+        layout: "card",
+      };
+    case "service_hero_banner":
+      return {
+        type: "service_hero_banner",
+        eyebrow: "",
+        heading_line1: "",
+        heading_line2_accent: "",
+        subtext: "",
+        cta: { label: "Get a Free Assessment", url: "/contact" },
+        tech_pills: [],
+      };
+    case "lifecycle_feature_list":
+      return { type: "lifecycle_feature_list", heading: "What's Included", description: "", items: [] };
+    case "challenge_solution_grid":
+      return { type: "challenge_solution_grid", heading: "Top Challenges I Solve", items: [] };
+    case "related_services_grid":
+      return { type: "related_services_grid", heading: "Related Services", items: [] };
     case "text":
     case "paragraph":
     default:
@@ -586,10 +684,16 @@ function Palette({ onAdd }: { onAdd: (paletteId: string) => void }) {
   );
 }
 
-// Drag-to-place is the primary interaction, but a plain click also appends the block/row to the
-// end of the canvas — a real click (mousedown+mouseup with no movement) never satisfies dnd-kit's
-// MouseSensor activationConstraint, so it can't fire mid-drag; this just makes "add a block" work
-// even when pointer-drag itself is flaky (trackpad quirks, remote displays, etc.).
+// The click-to-add button and the drag handle are two separate elements (button vs. grip icon),
+// mirroring the same split used for canvas rows/items (RowHeader's grip span). They used to be
+// one element with both `{...listeners}` (drag) and `onClick` (add) spread onto it, on the theory
+// that dnd-kit's MouseSensor activationConstraint (distance: 4) guarantees a real click never
+// satisfies drag activation — in practice that guarantee didn't hold reliably in this app (a click
+// could still get treated as a drag activation, which left DnD-kit's active/DragOverlay state
+// stuck and stole DOM focus back to this button on a subsequent, unrelated click elsewhere, most
+// visibly breaking typing in a freshly-added text block right after adding it from the palette).
+// Isolating the two onto separate elements removes the ambiguity at the source: the button never
+// has drag listeners, so pointerdown on it can never be interpreted as a drag by dnd-kit at all.
 function PaletteDraggable({
   id,
   label,
@@ -603,20 +707,30 @@ function PaletteDraggable({
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id });
   return (
-    <button
+    <div
       ref={setNodeRef}
-      type="button"
-      title="Перетащите на холст или нажмите, чтобы добавить в конец"
-      {...listeners}
-      {...attributes}
-      onClick={() => onAdd(id)}
-      className={`flex cursor-grab items-center gap-2 rounded-md border border-md-outline-variant px-2 py-1.5 text-left text-[12.5px] text-md-on-surface active:cursor-grabbing ${
+      className={`flex items-center gap-1 rounded-md border border-md-outline-variant text-[12.5px] text-md-on-surface ${
         isDragging ? "opacity-40" : "hover:bg-md-surface-container-low"
       }`}
     >
-      <i className={`ti ${icon} shrink-0 text-[13px] text-md-on-surface-variant`} />
-      <span className="truncate">{label}</span>
-    </button>
+      <button
+        type="button"
+        title="Нажмите, чтобы добавить в конец"
+        onClick={() => onAdd(id)}
+        className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-left"
+      >
+        <i className={`ti ${icon} shrink-0 text-[13px] text-md-on-surface-variant`} />
+        <span className="min-w-0 truncate">{label}</span>
+      </button>
+      <span
+        {...listeners}
+        {...attributes}
+        title="Перетащите на холст"
+        className="cursor-grab pr-1.5 text-md-on-surface-variant active:cursor-grabbing"
+      >
+        <i className="ti ti-grip-vertical text-sm" />
+      </span>
+    </div>
   );
 }
 
@@ -885,6 +999,23 @@ function BlockBody({ block, onChange }: { block: Block; onChange: (block: Block)
       return <TestimonialsCarouselBlockEditor block={block} onChange={onChange} />;
     case "apps_showcase":
       return <p className="m-0 text-[12px] text-md-on-surface-variant">Показывает все опубликованные приложения с флагом «на главной» — без настроек.</p>;
+    case "blog_showcase":
+      return (
+        <div className="flex items-center gap-2">
+          <p className="m-0 text-[12px] text-md-on-surface-variant">Показывать последних постов блога:</p>
+          <select
+            value={block.count ?? 3}
+            onChange={(e) => onChange({ ...block, count: Number(e.target.value) })}
+            className="rounded border border-md-outline-variant bg-transparent px-1.5 py-0.5 text-[12px] text-md-on-surface"
+          >
+            {[3, 6, 9].map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+        </div>
+      );
     case "app_mockup_panel":
       return <AppMockupPanelBlockEditor block={block} onChange={onChange} />;
     case "annotated_screenshot":
@@ -895,6 +1026,30 @@ function BlockBody({ block, onChange }: { block: Block; onChange: (block: Block)
       return <p className="m-0 text-[12px] text-md-on-surface-variant">Декоративный индикатор — без настроек.</p>;
     case "section_label":
       return <SectionLabelBlockEditor block={block} onChange={onChange} />;
+    case "hero_slider":
+      return <HeroSliderBlockEditor block={block} onChange={onChange} />;
+    case "platform_grid":
+      return <PlatformGridBlockEditor block={block} onChange={onChange} />;
+    case "faq_accordion":
+      return <FaqAccordionBlockEditor block={block} onChange={onChange} />;
+    case "why_choose_us":
+      return <WhyChooseUsBlockEditor block={block} onChange={onChange} />;
+    case "hero_split_diagram":
+      return <HeroSplitDiagramBlockEditor block={block} onChange={onChange} />;
+    case "core_services_grid":
+      return <CoreServicesGridBlockEditor block={block} onChange={onChange} />;
+    case "logo_marquee":
+      return <LogoMarqueeBlockEditor block={block} onChange={onChange} />;
+    case "contact_form":
+      return <ContactFormBlockEditor block={block} onChange={onChange} />;
+    case "service_hero_banner":
+      return <ServiceHeroBannerBlockEditor block={block} onChange={onChange} />;
+    case "lifecycle_feature_list":
+      return <LifecycleFeatureListBlockEditor block={block} onChange={onChange} />;
+    case "challenge_solution_grid":
+      return <ChallengeSolutionGridBlockEditor block={block} onChange={onChange} />;
+    case "related_services_grid":
+      return <RelatedServicesGridBlockEditor block={block} onChange={onChange} />;
     default:
       return null;
   }

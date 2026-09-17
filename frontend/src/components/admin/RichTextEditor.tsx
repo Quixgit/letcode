@@ -107,6 +107,12 @@ export function RichTextEditor({ html, onChange }: RichTextEditorProps) {
         onKeyUp={saveSelection}
         dangerouslySetInnerHTML={{ __html: html }}
         className="admin-richtext-editable min-h-[160px] rounded-md border border-md-outline-variant px-3 py-2.5 outline-none focus:border-md-primary"
+        spellCheck={false}
+        data-gramm="false"
+        data-gramm_editor="false"
+        data-enable-grammarly="false"
+        data-lt-active="false"
+        data-ms-editor="false"
       />
       <MediaPicker open={pickerOpen} onClose={() => setPickerOpen(false)} onSelect={(item) => insertImage(item.url, item.alt_text || "")} />
     </div>

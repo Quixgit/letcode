@@ -10,7 +10,13 @@ import { Sidebar } from "@/components/admin/Sidebar";
 import { AdminHeader } from "@/components/admin/AdminHeader";
 
 export default function ProtectedAdminLayout({ children }: { children: React.ReactNode }) {
-  const [queryClient] = useState(() => new QueryClient());
+  // refetchOnWindowFocus (React Query's default) is actively harmful here: this is a content
+  // editor, not a live dashboard, and even a background refetch's re-render can steal DOM focus
+  // out from under an in-progress edit (e.g. typing in a contentEditable block) — see the block
+  // editor "can't type, focus keeps jumping away" bug this was diagnosed against.
+  const [queryClient] = useState(
+    () => new QueryClient({ defaultOptions: { queries: { refetchOnWindowFocus: false } } })
+  );
   const pathname = usePathname();
 
   return (

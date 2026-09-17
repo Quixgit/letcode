@@ -1,4 +1,7 @@
 import Link from "next/link";
+import { getPublicSettings } from "@/lib/api";
+import { DecorativeBackground } from "@/components/site/DecorativeBackground";
+import { SITE_CONTENT_WIDTH } from "@/components/site/PageContainer";
 
 function TickGauge() {
   const tickCount = 72;
@@ -61,10 +64,14 @@ function TickGauge() {
   );
 }
 
-export function NexusClassicHero() {
+export async function NexusClassicHero() {
+  const settings = await getPublicSettings();
+  const showDecorative = settings.show_decorative_backgrounds !== false;
+
   return (
-    <section style={{ padding: "4rem 2rem 4rem", maxWidth: 1000, margin: "0 auto" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 48, flexWrap: "wrap", justifyContent: "center" }}>
+    <section style={{ position: "relative", padding: "4rem 2rem 4rem", maxWidth: SITE_CONTENT_WIDTH, margin: "0 auto", overflow: "hidden" }}>
+      {showDecorative && <DecorativeBackground />}
+      <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 48, flexWrap: "wrap", justifyContent: "center" }}>
         <TickGauge />
         <div style={{ maxWidth: 460 }}>
           <h1

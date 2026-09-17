@@ -1,8 +1,10 @@
+import { PageContainer } from "@/components/site/PageContainer";
+
 export function SectionLabel({ text }: { text: string }) {
   if (!text) return null;
 
   return (
-    <div style={{ padding: "0 2rem", maxWidth: 1000, margin: "0 auto" }}>
+    <PageContainer>
       <p
         style={{
           fontSize: 12,
@@ -16,6 +18,6 @@ export function SectionLabel({ text }: { text: string }) {
       >
         {text}
       </p>
-    </div>
+    </PageContainer>
   );
 }

@@ -9,6 +9,12 @@ type AnnotatedScreenshotBlock = Extract<PublicPageBlock, { type: "annotated_scre
 
 const inputClass =
   "block w-full rounded-md border border-md-outline-variant bg-transparent px-2.5 py-1.5 text-[13px] text-md-on-surface outline-none focus:border-md-outline";
+// Same field, no `w-full` baked in — the side/percent fields below need `w-20`/`w-16` to actually
+// win over `w-full` (Tailwind resolves conflicting width utilities by stylesheet order, not
+// className position), otherwise they claim the whole row and the `text` field's `flex-1` sibling
+// gets nothing.
+const fieldClass =
+  "rounded-md border border-md-outline-variant bg-transparent px-2.5 py-1.5 text-[13px] text-md-on-surface outline-none focus:border-md-outline";
 
 export function AnnotatedScreenshotBlockEditor({
   block,
@@ -39,7 +45,7 @@ export function AnnotatedScreenshotBlockEditor({
 
       {block.annotations.map((a, i) => (
         <div key={i} className="flex items-center gap-2">
-          <select value={a.side} onChange={(e) => update(i, { side: e.target.value as "left" | "right" })} className={`${inputClass} w-20`}>
+          <select value={a.side} onChange={(e) => update(i, { side: e.target.value as "left" | "right" })} className={`${fieldClass} w-20 shrink-0`}>
             <option value="left">Слева</option>
             <option value="right">Справа</option>
           </select>
@@ -49,10 +55,10 @@ export function AnnotatedScreenshotBlockEditor({
             max={100}
             value={a.y_percent}
             onChange={(e) => update(i, { y_percent: Number(e.target.value) })}
-            className={`${inputClass} w-16`}
+            className={`${fieldClass} w-16 shrink-0`}
             title="Высота, %"
           />
-          <input value={a.text} onChange={(e) => update(i, { text: e.target.value })} placeholder="Текст подписи" className={`${inputClass} min-w-0 flex-1`} />
+          <input value={a.text} onChange={(e) => update(i, { text: e.target.value })} placeholder="Текст подписи" className={`${fieldClass} min-w-0 flex-1`} />
           <button type="button" onClick={() => onChange({ ...block, annotations: block.annotations.filter((_, idx) => idx !== i) })} className="text-md-on-surface-variant hover:text-md-error">
             <i className="ti ti-x text-sm" />
           </button>

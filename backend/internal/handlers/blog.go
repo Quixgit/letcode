@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"encoding/json"
-	"encoding/xml"
 	"net/http"
 	"strconv"
 	"time"
@@ -34,6 +33,12 @@ type blogPost struct {
 	MetaTitle          *string         `json:"meta_title"`
 	MetaDescription    *string         `json:"meta_description"`
 	OGImageURL         *string         `json:"og_image_url"`
+	CanonicalURL       *string         `json:"canonical_url"`
+	NoIndex            bool            `json:"noindex"`
+	StructuredData     json.RawMessage `json:"structured_data,omitempty"`
+	ReviewStatus       string          `json:"review_status"`
+	ReviewNote         *string         `json:"review_note,omitempty"`
+	DeletedAt          *time.Time      `json:"deleted_at,omitempty"`
 	PublishedAt        *time.Time      `json:"published_at"`
 	ScheduledPublishAt *time.Time      `json:"scheduled_publish_at"`
 	CreatedAt          time.Time       `json:"created_at"`
@@ -50,6 +55,9 @@ type blogRequest struct {
 	MetaTitle          *string         `json:"meta_title"`
 	MetaDescription    *string         `json:"meta_description"`
 	OGImageURL         *string         `json:"og_image_url"`
+	CanonicalURL       *string         `json:"canonical_url"`
+	NoIndex            bool            `json:"noindex"`
+	StructuredData     json.RawMessage `json:"structured_data"`
 	ScheduledPublishAt *time.Time      `json:"scheduled_publish_at"`
 }
 
@@ -58,13 +66,18 @@ func (h *BlogHandler) List(c echo.Context) error {
 	defer cancel()
 	status := c.QueryParam("status")
 
-	query := `SELECT b.id, b.slug, b.title, b.excerpt, b.status, b.tags, b.published_at,
-	 b.scheduled_publish_at, b.created_at, b.updated_at, u.email
+	query := `SELECT b.id, b.slug, b.title, b.excerpt, b.status, b.tags, b.review_status, b.published_at,
+	 b.scheduled_publish_at, b.deleted_at, b.created_at, b.updated_at, u.email
 	 FROM blog_posts b LEFT JOIN users u ON u.id = b.author_id`
 	args := []interface{}{}
-	if status != "" {
-		query += " WHERE b.status=$1"
-		args = append(args, status)
+	if status == "trash" {
+		query += " WHERE b.deleted_at IS NOT NULL"
+	} else {
+		query += " WHERE b.deleted_at IS NULL"
+		if status != "" {
+			query += " AND b.status=$1"
+			args = append(args, status)
+		}
 	}
 	query += " ORDER BY b.updated_at DESC"
 
@@ -77,8 +90,8 @@ func (h *BlogHandler) List(c echo.Context) error {
 	items := []blogPost{}
 	for rows.Next() {
 		var p blogPost
-		if err := rows.Scan(&p.ID, &p.Slug, &p.Title, &p.Excerpt, &p.Status, &p.Tags, &p.PublishedAt,
-			&p.ScheduledPublishAt, &p.CreatedAt, &p.UpdatedAt, &p.AuthorEmail); err == nil {
+		if err := rows.Scan(&p.ID, &p.Slug, &p.Title, &p.Excerpt, &p.Status, &p.Tags, &p.ReviewStatus, &p.PublishedAt,
+			&p.ScheduledPublishAt, &p.DeletedAt, &p.CreatedAt, &p.UpdatedAt, &p.AuthorEmail); err == nil {
 			items = append(items, p)
 		}
 	}
@@ -91,15 +104,17 @@ func (h *BlogHandler) Get(c echo.Context) error {
 	var p blogPost
 	err := h.Pool.QueryRow(ctx,
 		`SELECT b.id, b.slug, b.title, b.excerpt, b.content, b.cover_image_media_id, m.url, b.author_id, u.email,
-		 b.status, b.tags, b.meta_title, b.meta_description, b.og_image_url, b.published_at,
-		 b.scheduled_publish_at, b.created_at, b.updated_at
+		 b.status, b.tags, b.meta_title, b.meta_description, b.og_image_url, b.canonical_url, b.noindex, b.structured_data,
+		 b.review_status, b.review_note,
+		 b.published_at, b.scheduled_publish_at, b.created_at, b.updated_at
 		 FROM blog_posts b
 		 LEFT JOIN media m ON m.id = b.cover_image_media_id
 		 LEFT JOIN users u ON u.id = b.author_id
-		 WHERE b.id=$1`, c.Param("id"),
+		 WHERE b.id=$1 AND b.deleted_at IS NULL`, c.Param("id"),
 	).Scan(&p.ID, &p.Slug, &p.Title, &p.Excerpt, &p.Content, &p.CoverImageMediaID, &p.CoverImageURL, &p.AuthorID, &p.AuthorEmail,
-		&p.Status, &p.Tags, &p.MetaTitle, &p.MetaDescription, &p.OGImageURL, &p.PublishedAt,
-		&p.ScheduledPublishAt, &p.CreatedAt, &p.UpdatedAt)
+		&p.Status, &p.Tags, &p.MetaTitle, &p.MetaDescription, &p.OGImageURL, &p.CanonicalURL, &p.NoIndex, &p.StructuredData,
+		&p.ReviewStatus, &p.ReviewNote,
+		&p.PublishedAt, &p.ScheduledPublishAt, &p.CreatedAt, &p.UpdatedAt)
 
 	if err == pgx.ErrNoRows {
 		return c.JSON(http.StatusNotFound, map[string]string{"error": "post_not_found"})
@@ -126,7 +141,7 @@ func (h *BlogHandler) ListPublic(c echo.Context) error {
 	 FROM blog_posts b
 	 LEFT JOIN media m ON m.id = b.cover_image_media_id
 	 LEFT JOIN users u ON u.id = b.author_id
-	 WHERE b.status='published'`
+	 WHERE b.status='published' AND b.deleted_at IS NULL`
 	args := []interface{}{}
 	if tag != "" {
 		args = append(args, tag)
@@ -157,13 +172,15 @@ func (h *BlogHandler) GetBySlugPublic(c echo.Context) error {
 	var p blogPost
 	err := h.Pool.QueryRow(ctx,
 		`SELECT b.id, b.slug, b.title, b.excerpt, b.content, b.cover_image_media_id, m.url, u.email,
-		 b.status, b.tags, b.meta_title, b.meta_description, b.og_image_url, b.published_at, b.created_at, b.updated_at
+		 b.status, b.tags, b.meta_title, b.meta_description, b.og_image_url, b.canonical_url, b.noindex, b.structured_data,
+		 b.published_at, b.created_at, b.updated_at
 		 FROM blog_posts b
 		 LEFT JOIN media m ON m.id = b.cover_image_media_id
 		 LEFT JOIN users u ON u.id = b.author_id
-		 WHERE b.slug=$1 AND b.status='published'`, c.Param("slug"),
+		 WHERE b.slug=$1 AND b.status='published' AND b.deleted_at IS NULL`, c.Param("slug"),
 	).Scan(&p.ID, &p.Slug, &p.Title, &p.Excerpt, &p.Content, &p.CoverImageMediaID, &p.CoverImageURL, &p.AuthorEmail,
-		&p.Status, &p.Tags, &p.MetaTitle, &p.MetaDescription, &p.OGImageURL, &p.PublishedAt, &p.CreatedAt, &p.UpdatedAt)
+		&p.Status, &p.Tags, &p.MetaTitle, &p.MetaDescription, &p.OGImageURL, &p.CanonicalURL, &p.NoIndex, &p.StructuredData,
+		&p.PublishedAt, &p.CreatedAt, &p.UpdatedAt)
 
 	if err == pgx.ErrNoRows {
 		return c.JSON(http.StatusNotFound, map[string]string{"error": "post_not_found"})
@@ -196,10 +213,10 @@ func (h *BlogHandler) Create(c echo.Context) error {
 	var id string
 	err := h.Pool.QueryRow(ctx,
 		`INSERT INTO blog_posts (slug, title, excerpt, content, cover_image_media_id, author_id, tags,
-		 meta_title, meta_description, og_image_url, scheduled_publish_at)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
+		 meta_title, meta_description, og_image_url, canonical_url, noindex, structured_data, scheduled_publish_at)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id`,
 		req.Slug, req.Title, req.Excerpt, req.Content, req.CoverImageMediaID, userID, req.Tags,
-		req.MetaTitle, req.MetaDescription, req.OGImageURL, req.ScheduledPublishAt,
+		req.MetaTitle, req.MetaDescription, req.OGImageURL, req.CanonicalURL, req.NoIndex, req.StructuredData, req.ScheduledPublishAt,
 	).Scan(&id)
 
 	if err != nil {
@@ -222,10 +239,10 @@ func (h *BlogHandler) Update(c echo.Context) error {
 	defer cancel()
 	_, err := h.Pool.Exec(ctx,
 		`UPDATE blog_posts SET slug=$1, title=$2, excerpt=$3, content=$4, cover_image_media_id=$5, tags=$6,
-		 meta_title=$7, meta_description=$8, og_image_url=$9, updated_at=now()
-		 WHERE id=$10`,
+		 meta_title=$7, meta_description=$8, og_image_url=$9, canonical_url=$10, noindex=$11, structured_data=$12, updated_at=now()
+		 WHERE id=$13`,
 		req.Slug, req.Title, req.Excerpt, req.Content, req.CoverImageMediaID, req.Tags,
-		req.MetaTitle, req.MetaDescription, req.OGImageURL, id,
+		req.MetaTitle, req.MetaDescription, req.OGImageURL, req.CanonicalURL, req.NoIndex, req.StructuredData, id,
 	)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "update_failed"})
@@ -251,14 +268,18 @@ func (h *BlogHandler) QuickEdit(c echo.Context) error {
 
 	ctx, cancel := db.WithTimeout()
 	defer cancel()
-	_, err := h.Pool.Exec(ctx,
+	var slug string
+	err := h.Pool.QueryRow(ctx,
 		`UPDATE blog_posts SET title=$1, slug=$2, status=$3, updated_at=now(),
 		 published_at = CASE WHEN $3='published' AND published_at IS NULL THEN now() ELSE published_at END
-		 WHERE id=$4`,
+		 WHERE id=$4 RETURNING slug`,
 		req.Title, req.Slug, req.Status, id,
-	)
+	).Scan(&slug)
 	if err != nil {
 		return c.JSON(http.StatusConflict, map[string]string{"error": "slug_taken_or_invalid"})
+	}
+	if req.Status == "published" {
+		PingIndexNow(h.Pool, h.BaseURL, []string{h.BaseURL + "/blog/" + slug})
 	}
 	return c.NoContent(http.StatusOK)
 }
@@ -267,11 +288,13 @@ func (h *BlogHandler) Publish(c echo.Context) error {
 	id := c.Param("id")
 	ctx, cancel := db.WithTimeout()
 	defer cancel()
-	_, err := h.Pool.Exec(ctx,
-		"UPDATE blog_posts SET status='published', published_at=now(), updated_at=now() WHERE id=$1", id)
+	var slug string
+	err := h.Pool.QueryRow(ctx,
+		"UPDATE blog_posts SET status='published', published_at=now(), updated_at=now() WHERE id=$1 RETURNING slug", id).Scan(&slug)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "publish_failed"})
 	}
+	PingIndexNow(h.Pool, h.BaseURL, []string{h.BaseURL + "/blog/" + slug})
 	return c.NoContent(http.StatusOK)
 }
 
@@ -312,15 +335,16 @@ func (h *BlogHandler) CancelSchedule(c echo.Context) error {
 	return c.NoContent(http.StatusOK)
 }
 
-func (h *BlogHandler) Delete(c echo.Context) error {
-	id := c.Param("id")
-	ctx, cancel := db.WithTimeout()
-	defer cancel()
-	_, err := h.Pool.Exec(ctx, "DELETE FROM blog_posts WHERE id=$1", id)
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "delete_failed"})
-	}
-	return c.NoContent(http.StatusNoContent)
+func (h *BlogHandler) Delete(c echo.Context) error  { return softDeleteContent(h.Pool, "blog_posts")(c) }
+func (h *BlogHandler) Restore(c echo.Context) error { return restoreContent(h.Pool, "blog_posts")(c) }
+func (h *BlogHandler) PermanentDelete(c echo.Context) error {
+	return permanentDeleteContent(h.Pool, "blog_posts")(c)
+}
+func (h *BlogHandler) SubmitReview(c echo.Context) error {
+	return submitReview(h.Pool, "blog_posts")(c)
+}
+func (h *BlogHandler) ReviewDecision(c echo.Context) error {
+	return reviewDecision(h.Pool, "blog_posts")(c)
 }
 
 func (h *BlogHandler) Tags(c echo.Context) error {
@@ -342,76 +366,3 @@ func (h *BlogHandler) Tags(c echo.Context) error {
 	return c.JSON(http.StatusOK, tags)
 }
 
-type rssFeed struct {
-	XMLName xml.Name   `xml:"rss"`
-	Version string     `xml:"version,attr"`
-	Channel rssChannel `xml:"channel"`
-}
-
-type rssChannel struct {
-	Title       string    `xml:"title"`
-	Link        string    `xml:"link"`
-	Description string    `xml:"description"`
-	Items       []rssItem `xml:"item"`
-}
-
-type rssItem struct {
-	Title       string `xml:"title"`
-	Link        string `xml:"link"`
-	GUID        string `xml:"guid"`
-	Description string `xml:"description"`
-	PubDate     string `xml:"pubDate"`
-}
-
-func (h *BlogHandler) Feed(c echo.Context) error {
-	ctx, cancel := db.WithTimeout()
-	defer cancel()
-	rows, err := h.Pool.Query(ctx,
-		`SELECT slug, title, excerpt, published_at FROM blog_posts
-		 WHERE status='published' ORDER BY published_at DESC LIMIT 30`)
-	if err != nil {
-		return c.String(http.StatusInternalServerError, "query failed")
-	}
-	defer rows.Close()
-
-	feed := rssFeed{
-		Version: "2.0",
-		Channel: rssChannel{
-			Title:       "lecode blog",
-			Link:        h.BaseURL + "/blog",
-			Description: "Updates from lecode.",
-		},
-	}
-
-	for rows.Next() {
-		var slug, title string
-		var excerpt *string
-		var publishedAt *time.Time
-		if err := rows.Scan(&slug, &title, &excerpt, &publishedAt); err != nil {
-			continue
-		}
-		desc := ""
-		if excerpt != nil {
-			desc = *excerpt
-		}
-		pubDate := ""
-		if publishedAt != nil {
-			pubDate = publishedAt.Format(time.RFC1123Z)
-		}
-		link := h.BaseURL + "/blog/" + slug
-		feed.Channel.Items = append(feed.Channel.Items, rssItem{
-			Title:       title,
-			Link:        link,
-			GUID:        link,
-			Description: desc,
-			PubDate:     pubDate,
-		})
-	}
-
-	c.Response().Header().Set(echo.HeaderContentType, "application/rss+xml; charset=utf-8")
-	output, err := xml.MarshalIndent(feed, "", "  ")
-	if err != nil {
-		return c.String(http.StatusInternalServerError, "encode failed")
-	}
-	return c.Blob(http.StatusOK, "application/rss+xml; charset=utf-8", append([]byte(xml.Header), output...))
-}

@@ -1,10 +1,12 @@
 import type { Testimonial } from "@/lib/api";
+import { PageContainer } from "@/components/site/PageContainer";
 
 export function TestimonialsSection({ testimonials }: { testimonials: Testimonial[] }) {
   if (testimonials.length === 0) return null;
 
   return (
-    <section style={{ padding: "0 2rem 4rem", maxWidth: 960, margin: "0 auto" }}>
+    <section style={{ padding: "0 0 4rem" }}>
+      <PageContainer>
       <h2 style={{ fontSize: 26, fontWeight: 500, color: "#17181C", textAlign: "center", margin: "0 0 2.5rem" }}>
         What people say
       </h2>
@@ -46,6 +48,7 @@ export function TestimonialsSection({ testimonials }: { testimonials: Testimonia
           </div>
         ))}
       </div>
+      </PageContainer>
     </section>
   );
 }

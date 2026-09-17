@@ -6,6 +6,7 @@ import { CategoryAutocomplete } from "@/components/admin/CategoryAutocomplete";
 import { FeaturesEditor } from "@/components/admin/FeaturesEditor";
 import { CharCounter } from "@/components/admin/CharCounter";
 import { SeoPreview } from "@/components/admin/SeoPreview";
+import { SeoChecklist } from "@/components/admin/SeoChecklist";
 import { Switch } from "@/components/admin/m3/Switch";
 import { FeatureSectionsEditor } from "@/components/admin/FeatureSectionsEditor";
 import { UseCaseTabsEditor } from "@/components/admin/UseCaseTabsEditor";
@@ -41,6 +42,9 @@ export interface AppFormValues {
   meta_title: string;
   meta_description: string;
   og_image_url: string;
+  canonical_url: string;
+  noindex: boolean;
+  structured_data: string;
   show_on_homepage: boolean;
   hero_image_media_id: string;
   hero_image_url: string;
@@ -70,6 +74,9 @@ function toFormValues(app?: AppDetail): AppFormValues {
     meta_title: app?.meta_title || "",
     meta_description: app?.meta_description || "",
     og_image_url: app?.og_image_url || "",
+    canonical_url: app?.canonical_url || "",
+    noindex: app?.noindex || false,
+    structured_data: app?.structured_data ? JSON.stringify(app.structured_data, null, 2) : "",
     show_on_homepage: app?.show_on_homepage ?? true,
     hero_image_media_id: app?.hero_image_media_id || "",
     hero_image_url: app?.hero_image_url || "",
@@ -120,6 +127,14 @@ export function AppForm({ initial, initialIconUrl, appId, screenshots, submittin
     if (!values.name.trim()) {
       setError("Название обязательно");
       return;
+    }
+    if (values.structured_data.trim()) {
+      try {
+        JSON.parse(values.structured_data);
+      } catch {
+        setError("Поле «Structured data» должно быть корректным JSON");
+        return;
+      }
     }
 
     setDirty(false);
@@ -331,36 +346,69 @@ export function AppForm({ initial, initialIconUrl, appId, screenshots, submittin
           </div>
         </Field>
 
+        <Field label="Canonical URL">
+          <input
+            value={values.canonical_url}
+            onChange={(e) => set("canonical_url", e.target.value)}
+            className={inputClass}
+            placeholder={`https://lecode.tech/apps/${values.slug || "slug"}`}
+          />
+        </Field>
+        <label className="flex items-center gap-2 text-[13px] text-md-on-surface">
+          <input type="checkbox" checked={values.noindex} onChange={(e) => set("noindex", e.target.checked)} />
+          noindex
+        </label>
+
         <div>
           <p className="mb-2 text-[13px] text-md-on-surface-variant">Предпросмотр</p>
           <SeoPreview
             title={values.meta_title || `${values.name || "App"} — lecode`}
             description={values.meta_description || values.short_description}
-            url={`https://lecode.tech/apps/${values.slug || "slug"}`}
+            url={values.canonical_url || `https://lecode.tech/apps/${values.slug || "slug"}`}
             image={values.og_image_url || values.icon_url}
           />
         </div>
 
-        <div>
-          <p className="mb-2 text-[13px] text-md-on-surface-variant">
-            JSON-LD (генерируется автоматически из полей выше, то же самое отдаётся на публичной странице)
-          </p>
-          <pre className="overflow-x-auto rounded-lg bg-md-surface-container-low p-3 text-[11px] text-md-on-surface">
-            {JSON.stringify(
-              {
-                "@context": "https://schema.org",
-                "@type": "SoftwareApplication",
-                name: values.name || undefined,
-                description: values.short_description || values.description || undefined,
-                applicationCategory: values.category || undefined,
-                url: values.website_url || `https://lecode.tech/apps/${values.slug || "slug"}`,
-                image: values.og_image_url || values.icon_url || undefined,
-              },
-              null,
-              2
-            )}
-          </pre>
-        </div>
+        <SeoChecklist
+          title={values.name}
+          metaTitle={values.meta_title}
+          metaDescription={values.meta_description || values.short_description}
+          slug={values.slug}
+          hasOgImage={!!(values.og_image_url || values.icon_url)}
+          noindex={values.noindex}
+        />
+
+        <Field label="Structured data (JSON, опционально — переопределяет автоматическую схему ниже)">
+          <textarea
+            value={values.structured_data}
+            onChange={(e) => set("structured_data", e.target.value)}
+            rows={4}
+            className={`${inputClass} font-mono text-xs`}
+          />
+        </Field>
+
+        {!values.structured_data.trim() && (
+          <div>
+            <p className="mb-2 text-[13px] text-md-on-surface-variant">
+              JSON-LD (генерируется автоматически из полей выше, то же самое отдаётся на публичной странице)
+            </p>
+            <pre className="overflow-x-auto rounded-lg bg-md-surface-container-low p-3 text-[11px] text-md-on-surface">
+              {JSON.stringify(
+                {
+                  "@context": "https://schema.org",
+                  "@type": "SoftwareApplication",
+                  name: values.name || undefined,
+                  description: values.short_description || values.description || undefined,
+                  applicationCategory: values.category || undefined,
+                  url: values.website_url || `https://lecode.tech/apps/${values.slug || "slug"}`,
+                  image: values.og_image_url || values.icon_url || undefined,
+                },
+                null,
+                2
+              )}
+            </pre>
+          </div>
+        )}
       </div>
 
       <div hidden={tab !== "links"} className="grid grid-cols-2 gap-4">
@@ -425,10 +473,13 @@ export function AppForm({ initial, initialIconUrl, appId, screenshots, submittin
 }
 
 function Field({ label, children }: { label: React.ReactNode; children: React.ReactNode }) {
+  // Deliberately a <div>, not a <label>: a native <label> forwards any click within its bounds
+  // to the first labelable descendant (input/button/etc), which misfires when a field nests its
+  // own interactive widgets (see PageForm/BlogPostForm's Field for the bug this caused there).
   return (
-    <label className="block text-[13px] text-md-on-surface-variant">
+    <div className="block text-[13px] text-md-on-surface-variant">
       {label}
       <div className="mt-1.5">{children}</div>
-    </label>
+    </div>
   );
 }

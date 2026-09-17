@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getPublicApps } from "@/lib/api";
+import { PageContainer } from "@/components/site/PageContainer";
 
 const appColors: Record<string, string> = {
   blare: "#0F6E56",
@@ -18,17 +19,14 @@ export async function AppsGrid({ apps }: { apps?: Awaited<ReturnType<typeof getP
   const list = allApps.filter((a) => a.show_on_homepage);
 
   return (
-    <section
-      id="apps"
-      style={{
-        padding: "0 2rem 4rem",
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
-        gap: 20,
-        maxWidth: 960,
-        margin: "0 auto",
-      }}
-    >
+    <section id="apps" style={{ padding: "0 0 4rem" }}>
+      <PageContainer
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
+          gap: 20,
+        }}
+      >
       {list.length === 0 && <p style={{ color: "#8A8C93", fontSize: 14 }}>No apps published yet.</p>}
       {list.map((app) => {
         const color = appColors[app.slug] || "#8A8C93";
@@ -139,6 +137,7 @@ export async function AppsGrid({ apps }: { apps?: Awaited<ReturnType<typeof getP
           </div>
         );
       })}
+      </PageContainer>
     </section>
   );
 }
@@ -148,17 +147,8 @@ export async function AppsStrip() {
   if (apps.length === 0) return null;
 
   return (
-    <section
-      style={{
-        padding: "0 2rem 3rem",
-        maxWidth: 960,
-        margin: "0 auto",
-        display: "flex",
-        gap: 12,
-        flexWrap: "wrap",
-        justifyContent: "center",
-      }}
-    >
+    <section style={{ padding: "0 0 3rem" }}>
+      <PageContainer style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center" }}>
       {apps.map((app) => {
         const color = appColors[app.slug] || "#8A8C93";
         return (
@@ -198,6 +188,7 @@ export async function AppsStrip() {
           </Link>
         );
       })}
+      </PageContainer>
     </section>
   );
 }

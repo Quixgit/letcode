@@ -32,11 +32,10 @@ func RequireAuth(secret string) echo.MiddlewareFunc {
 	}
 }
 
-// RequireRole wraps RequireAuth with a real server-side role check — the only
-// place in this codebase that does so, since every other RBAC gate is UI-only
-// by design. Used where a UI-only gate would be an actual security gap (user
+// RequireRole wraps RequireAuth with a real server-side role check — used where a
+// role name (not a content capability) is the right unit of access, i.e. user
 // management: anyone with a valid token could otherwise invite users or grant
-// themselves admin via a direct API call).
+// themselves admin via a direct API call.
 func RequireRole(secret string, pool *pgxpool.Pool, allowed ...string) echo.MiddlewareFunc {
 	requireAuth := RequireAuth(secret)
 
@@ -61,6 +60,38 @@ func RequireRole(secret string, pool *pgxpool.Pool, allowed ...string) echo.Midd
 				}
 			}
 			return c.JSON(http.StatusForbidden, map[string]string{"error": "forbidden"})
+		})
+	}
+}
+
+// RequireCapability wraps RequireAuth with a real server-side check against the
+// caller's role's `permissions` JSONB array (e.g. "pages.write") — an admin's "*"
+// entry always passes. This is what gates every content-mutating route (pages,
+// apps, blog, media, redirects, nav, testimonials, templates, settings): previously
+// those routes only checked for a *valid token*, so any authenticated user —
+// including a viewer — could edit or delete anything via a direct API call, even
+// though the UI hid the buttons for them. See RequireRole for the role-name-based
+// variant used by user management specifically.
+func RequireCapability(secret string, pool *pgxpool.Pool, capability string) echo.MiddlewareFunc {
+	requireAuth := RequireAuth(secret)
+
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return requireAuth(func(c echo.Context) error {
+			userID, _ := c.Get("user_id").(string)
+
+			ctx, cancel := db.WithTimeout()
+			defer cancel()
+			var allowed bool
+			err := pool.QueryRow(ctx,
+				`SELECT (r.permissions ? '*') OR (r.permissions ? $2)
+				 FROM roles r JOIN users u ON u.role_id = r.id
+				 WHERE u.id=$1 AND u.deleted_at IS NULL`,
+				userID, capability,
+			).Scan(&allowed)
+			if err != nil || !allowed {
+				return c.JSON(http.StatusForbidden, map[string]string{"error": "forbidden"})
+			}
+			return next(c)
 		})
 	}
 }

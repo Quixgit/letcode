@@ -18,6 +18,9 @@ function toBody(values: BlogPostFormValues) {
     meta_title: values.meta_title || null,
     meta_description: values.meta_description || null,
     og_image_url: values.og_image_url || null,
+    canonical_url: values.canonical_url || null,
+    noindex: values.noindex,
+    structured_data: values.structured_data.trim() ? JSON.parse(values.structured_data) : null,
   };
 }
 

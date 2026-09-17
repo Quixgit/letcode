@@ -6,6 +6,7 @@ import { adminFetch } from "@/lib/admin-api";
 import { MediaPicker } from "@/components/admin/MediaPicker";
 import { CharCounter } from "@/components/admin/CharCounter";
 import { SeoPreview } from "@/components/admin/SeoPreview";
+import { SeoChecklist } from "@/components/admin/SeoChecklist";
 import { BlockEditor } from "@/components/admin/BlockEditor";
 import { TagInput } from "@/components/admin/m3/TagInput";
 import { Card } from "@/components/admin/m3/Card";
@@ -25,6 +26,9 @@ export interface BlogPostFormValues {
   meta_title: string;
   meta_description: string;
   og_image_url: string;
+  canonical_url: string;
+  noindex: boolean;
+  structured_data: string;
 }
 
 const inputClass =
@@ -42,6 +46,9 @@ function toFormValues(post?: BlogPostDetail): BlogPostFormValues {
     meta_title: post?.meta_title || "",
     meta_description: post?.meta_description || "",
     og_image_url: post?.og_image_url || "",
+    canonical_url: post?.canonical_url || "",
+    noindex: post?.noindex || false,
+    structured_data: post?.structured_data ? JSON.stringify(post.structured_data, null, 2) : "",
   };
 }
 
@@ -79,6 +86,14 @@ export function BlogPostForm({ initial, submitting, submitLabel, onSubmit }: Blo
     if (!values.title.trim()) {
       setError("Заголовок обязателен");
       return;
+    }
+    if (values.structured_data.trim()) {
+      try {
+        JSON.parse(values.structured_data);
+      } catch {
+        setError("Поле «Structured data» должно быть корректным JSON");
+        return;
+      }
     }
 
     setDirty(false);
@@ -193,15 +208,45 @@ export function BlogPostForm({ initial, submitting, submitLabel, onSubmit }: Blo
             </div>
           </Field>
 
+          <Field label="Canonical URL">
+            <input
+              value={values.canonical_url}
+              onChange={(e) => set("canonical_url", e.target.value)}
+              className={inputClass}
+              placeholder={`https://lecode.tech/blog/${values.slug || "slug"}`}
+            />
+          </Field>
+          <label className="flex items-center gap-2 text-[13px] text-md-on-surface">
+            <input type="checkbox" checked={values.noindex} onChange={(e) => set("noindex", e.target.checked)} />
+            noindex
+          </label>
+          <Field label="Structured data (JSON, опционально)">
+            <textarea
+              value={values.structured_data}
+              onChange={(e) => set("structured_data", e.target.value)}
+              rows={4}
+              className={`${inputClass} font-mono text-xs`}
+            />
+          </Field>
+
           <div>
             <p className="mb-2 text-[13px] text-md-on-surface-variant">Предпросмотр</p>
             <SeoPreview
               title={values.meta_title || values.title}
               description={values.meta_description || values.excerpt}
-              url={`https://lecode.tech/blog/${values.slug || "slug"}`}
+              url={values.canonical_url || `https://lecode.tech/blog/${values.slug || "slug"}`}
               image={values.og_image_url || values.cover_image_url}
             />
           </div>
+
+          <SeoChecklist
+            title={values.title}
+            metaTitle={values.meta_title}
+            metaDescription={values.meta_description || values.excerpt}
+            slug={values.slug}
+            hasOgImage={!!(values.og_image_url || values.cover_image_url)}
+            noindex={values.noindex}
+          />
         </div>
       </Card>
 
@@ -231,10 +276,15 @@ export function BlogPostForm({ initial, submitting, submitLabel, onSubmit }: Blo
 }
 
 function Field({ label, children }: { label: React.ReactNode; children: React.ReactNode }) {
+  // Deliberately a <div>, not a <label>: a native <label> forwards any click within its bounds
+  // to the first labelable descendant (input/button/etc). Several fields here nest interactive
+  // widgets (BlockEditor's palette buttons, MediaPicker's "Выбрать изображение" button, ...), so a
+  // <label> wrapper caused clicks anywhere in the field to silently re-trigger that first control
+  // — most visibly, clicking anywhere under "Содержимое" kept adding a new block to the end.
   return (
-    <label className="block text-[13px] text-md-on-surface-variant">
+    <div className="block text-[13px] text-md-on-surface-variant">
       {label}
       <div className="mt-1.5">{children}</div>
-    </label>
+    </div>
   );
 }

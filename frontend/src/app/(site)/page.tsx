@@ -9,6 +9,7 @@ import {
   DEFAULT_HOMEPAGE_SECTIONS,
 } from "@/lib/api";
 import { BlockRenderer } from "@/components/site/BlockRenderer";
+import { buildFaqPageJsonLd } from "@/lib/seo";
 import { StatsBar } from "@/components/site/StatsBar";
 import { TestimonialsSection } from "@/components/site/TestimonialsSection";
 import { BlogPreview } from "@/components/site/BlogPreview";
@@ -17,6 +18,7 @@ import { NexusHero } from "@/components/site/NexusHero";
 import { NexusClassicHero } from "@/components/site/NexusClassicHero";
 import { Reveal } from "@/components/site/Reveal";
 import { BlogCoverArt } from "@/components/site/BlogCoverArt";
+import { PageContainer } from "@/components/site/PageContainer";
 
 export const dynamic = "force-dynamic";
 
@@ -40,22 +42,58 @@ export const metadata: Metadata = {
 
 function Hero({ compact }: { compact?: boolean }) {
   return (
-    <section style={{ padding: compact ? "3rem 2rem 2rem" : "4.5rem 2rem 3rem", textAlign: "center" }}>
-      <h1
+    <section style={{ padding: compact ? "3rem 0 2rem" : "4.5rem 0 3rem", textAlign: "center" }}>
+      <PageContainer>
+        <h1
+          style={{
+            fontSize: compact ? 28 : 38,
+            fontWeight: 500,
+            margin: "0 auto 16px",
+            maxWidth: 560,
+            lineHeight: 1.25,
+            color: "var(--site-text, #17181C)",
+          }}
+        >
+          Small, focused apps for people who run infrastructure
+        </h1>
+        <p style={{ fontSize: 16, color: "var(--site-text-muted, #8A8C93)", margin: "0 auto", maxWidth: 440, lineHeight: 1.7 }}>
+          Built by one DevOps engineer who&apos;d rather ship than configure.
+        </p>
+      </PageContainer>
+    </section>
+  );
+}
+
+function MarketplaceComingSoon() {
+  return (
+    <section style={{ padding: "3rem 0 6rem", textAlign: "center" }}>
+      <PageContainer
         style={{
-          fontSize: compact ? 28 : 38,
-          fontWeight: 500,
-          margin: "0 auto 16px",
-          maxWidth: 560,
-          lineHeight: 1.25,
-          color: "var(--site-text, #17181C)",
+          maxWidth: 480,
+          padding: "2.5rem 2rem",
+          border: "1px solid var(--site-border, #EAE8E1)",
+          borderRadius: 16,
         }}
       >
-        Small, focused apps for people who run infrastructure
-      </h1>
-      <p style={{ fontSize: 16, color: "var(--site-text-muted, #8A8C93)", margin: "0 auto", maxWidth: 440, lineHeight: 1.7 }}>
-        Built by one DevOps engineer who&apos;d rather ship than configure.
-      </p>
+        <p
+          style={{
+            fontSize: 13,
+            fontWeight: 600,
+            letterSpacing: 0.4,
+            textTransform: "uppercase",
+            color: "var(--site-text-muted, #8A8C93)",
+            margin: "0 0 8px",
+          }}
+        >
+          Marketplace
+        </p>
+        <p style={{ fontSize: 20, fontWeight: 500, color: "var(--site-text, #17181C)", margin: "0 0 8px" }}>
+          Coming soon
+        </p>
+        <p style={{ fontSize: 14, color: "var(--site-text-muted, #8A8C93)", margin: 0, lineHeight: 1.6 }}>
+          We&apos;re building a marketplace for infrastructure tools and integrations. Check back soon.
+        </p>
+      </PageContainer>
     </section>
   );
 }
@@ -63,7 +101,8 @@ function Hero({ compact }: { compact?: boolean }) {
 function BlogFeed({ posts }: { posts: Awaited<ReturnType<typeof getPublicBlogPosts>> }) {
   if (posts.length === 0) return null;
   return (
-    <section style={{ padding: "0 2rem 4rem", maxWidth: 720, margin: "0 auto", display: "flex", flexDirection: "column", gap: 32 }}>
+    <section style={{ padding: "0 0 4rem" }}>
+      <PageContainer style={{ maxWidth: 720, display: "flex", flexDirection: "column", gap: 32 }}>
       {posts.map((post) => (
         <a key={post.id} href={`/blog/${post.slug}`} style={{ textDecoration: "none", display: "flex", gap: 20 }}>
           {post.cover_image_url ? (
@@ -89,6 +128,7 @@ function BlogFeed({ posts }: { posts: Awaited<ReturnType<typeof getPublicBlogPos
           </div>
         </a>
       ))}
+      </PageContainer>
     </section>
   );
 }
@@ -119,7 +159,14 @@ export default async function Home() {
       name: app.name,
     })),
   };
-  const jsonLdScript = <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(itemListJsonLd) }} />;
+  const faqJsonLd = buildFaqPageJsonLd(settings.homepage_blocks || []);
+  const jsonLdScript =
+    settings.seo_json_ld_enabled === false ? null : (
+      <>
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(itemListJsonLd) }} />
+        {faqJsonLd && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }} />}
+      </>
+    );
 
   // ---- site_mode: full — richest composition, apps + blog + testimonials in equal footing ----
   if (siteMode === "full") {
@@ -217,7 +264,19 @@ export default async function Home() {
     );
   }
 
-  // ---- new: minimal (hero + apps only) -----------------------------------
+  // ---- new: marketplace (stub) — hero + "coming soon" placeholder --------
+  if (layout === "marketplace") {
+    return (
+      <div style={{ background: "var(--site-page-bg, #FFFFFF)", minHeight: "100vh" }}>
+        {jsonLdScript}
+        {sections.hero && <Hero />}
+        <MarketplaceComingSoon />
+      </div>
+    );
+  }
+
+  // ---- legacy: minimal / apps_grid — superseded by "marketplace" in the admin
+  // mode switcher, kept only so pre-existing data with this layout value still renders. --------
   if (layout === "minimal" || layout === "apps_grid") {
     return (
       <div style={{ background: "var(--site-page-bg, #FFFFFF)", minHeight: "100vh" }}>

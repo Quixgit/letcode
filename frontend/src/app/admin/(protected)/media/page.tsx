@@ -12,7 +12,14 @@ import { EmptyState } from "@/components/admin/m3/EmptyState";
 import { SegmentedButton } from "@/components/admin/m3/SegmentedButton";
 import { MediaDetailPanel } from "@/components/admin/MediaDetailPanel";
 import { FilterBar, FilterField, FilterInput, FilterSelect } from "@/components/admin/FilterBar";
-import type { MediaItem } from "@/lib/admin-types";
+import type { MediaItem, MediaUsageItem } from "@/lib/admin-types";
+
+const USAGE_LABELS: Record<MediaUsageItem["kind"], string> = {
+  app_icon: "иконка приложения",
+  app_hero: "hero-изображение приложения",
+  app_screenshot: "скриншот приложения",
+  blog_cover: "обложка поста блога",
+};
 
 interface MediaFilter {
   mimeType: string;
@@ -166,13 +173,19 @@ export default function MediaPage() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => adminFetch(`api/media/${id}`, { method: "DELETE" }),
+    mutationFn: (id: string) => adminFetch(`api/media/${id}?force=true`, { method: "DELETE" }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["media"] });
       showToast("Файл удалён");
       setPendingDelete(null);
     },
     onError: (err: Error) => showToast(err.message, "error"),
+  });
+
+  const usageQuery = useQuery({
+    queryKey: ["media-usage", pendingDelete?.id],
+    queryFn: () => adminFetch<MediaUsageItem[]>(`api/media/${pendingDelete!.id}/usage`),
+    enabled: !!pendingDelete,
   });
 
   return (
@@ -296,7 +309,14 @@ export default function MediaPage() {
       <ConfirmDialog
         open={!!pendingDelete}
         title={`Удалить «${pendingDelete?.filename}»?`}
-        description="Файл будет удалён с диска и из базы данных без возможности восстановления."
+        description={
+          usageQuery.data && usageQuery.data.length > 0
+            ? `Внимание: используется в ${usageQuery.data.length} мест${usageQuery.data.length === 1 ? "е" : "ах"} — ${usageQuery.data
+                .map((u) => `${USAGE_LABELS[u.kind]} «${u.title}»`)
+                .join(", ")}. Удаление сломает эти места. Файл будет удалён с диска и из базы данных без возможности восстановления.`
+            : "Файл будет удалён с диска и из базы данных без возможности восстановления."
+        }
+        confirmLabel={usageQuery.data && usageQuery.data.length > 0 ? "Удалить всё равно" : "Удалить"}
         onConfirm={() => pendingDelete && deleteMutation.mutate(pendingDelete.id)}
         onCancel={() => setPendingDelete(null)}
       />

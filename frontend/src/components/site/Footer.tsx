@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getPublicSettings, getPublicNavItems, getPublicApps, getActiveTemplate } from "@/lib/api";
 import { AppStoreBadge, GooglePlayBadge } from "@/components/site/StoreBadges";
+import { PageContainer } from "@/components/site/PageContainer";
 
 export async function Footer() {
   const [settings, navItems, apps, template] = await Promise.all([
@@ -33,15 +34,13 @@ export async function Footer() {
     <footer
       style={{
         borderTop: "0.5px solid #EAE8E1",
-        padding: "3rem 2rem 2rem",
+        padding: "3rem 0 2rem",
         marginTop: "auto",
         background: "var(--site-footer-bg, transparent)",
       }}
     >
-      <div
+      <PageContainer
         style={{
-          maxWidth: 1100,
-          margin: "0 auto",
           display: "grid",
           gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
           gap: 32,
@@ -70,10 +69,9 @@ export async function Footer() {
             </div>
           </div>
         )}
-      </div>
-      <div
+      </PageContainer>
+      <PageContainer
         style={{
-          maxWidth: 1100,
           margin: "2.5rem auto 0",
           paddingTop: "1.5rem",
           borderTop: "0.5px solid #EAE8E1",
@@ -102,11 +100,8 @@ export async function Footer() {
           <a href="/llms.txt" style={{ fontSize: 12, color: "var(--site-text-muted, #8A8C93)", textDecoration: "none" }}>
             llms.txt
           </a>
-          <a href="/blog/feed.xml" style={{ fontSize: 12, color: "var(--site-text-muted, #8A8C93)", textDecoration: "none" }}>
-            RSS
-          </a>
         </div>
-      </div>
+      </PageContainer>
     </footer>
   );
 }

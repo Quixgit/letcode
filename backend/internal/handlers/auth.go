@@ -75,7 +75,7 @@ func (h *AuthHandler) Login(c echo.Context) error {
 	defer cancel()
 	var userID, roleID, hash string
 	err := h.Pool.QueryRow(ctx,
-		"SELECT id, role_id, password_hash FROM users WHERE email=$1 AND is_active=true",
+		"SELECT id, role_id, password_hash FROM users WHERE email=$1 AND is_active=true AND deleted_at IS NULL",
 		req.Email,
 	).Scan(&userID, &roleID, &hash)
 	if err != nil || !auth.CheckPassword(req.Password, hash) {
@@ -98,7 +98,7 @@ func (h *AuthHandler) Refresh(c echo.Context) error {
 	rows, err := h.Pool.Query(ctx,
 		`SELECT rt.id, rt.token_hash, u.id, u.role_id FROM refresh_tokens rt
 		 JOIN users u ON u.id = rt.user_id
-		 WHERE rt.revoked=false AND rt.expires_at > now()`,
+		 WHERE rt.revoked=false AND rt.expires_at > now() AND u.is_active=true AND u.deleted_at IS NULL`,
 	)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "query_failed"})

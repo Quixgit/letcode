@@ -1,3 +1,5 @@
+import { PageContainer } from "@/components/site/PageContainer";
+
 type Row = { label: string; kind: "slider" | "toggle"; value?: number; on?: boolean };
 type Category = { title: string; rows: Row[] };
 
@@ -60,8 +62,8 @@ export function CategoryPreviewRow({ categories }: { categories: Category[] }) {
   if (categories.length === 0) return null;
 
   return (
-    <section style={{ padding: "0 2rem 4rem", maxWidth: 1000, margin: "0 auto" }}>
-      <div
+    <section style={{ padding: "0 0 4rem" }}>
+      <PageContainer
         style={{
           display: "grid",
           gridTemplateColumns: `repeat(auto-fit, minmax(240px, 1fr))`,
@@ -89,7 +91,7 @@ export function CategoryPreviewRow({ categories }: { categories: Category[] }) {
             {cat.rows.map((row, j) => (row.kind === "slider" ? <SliderRow key={j} row={row} /> : <ToggleRow key={j} row={row} />))}
           </div>
         ))}
-      </div>
+      </PageContainer>
     </section>
   );
 }

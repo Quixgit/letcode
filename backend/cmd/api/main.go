@@ -16,7 +16,7 @@ import (
 	authmw "lecode.tech/backend/internal/middleware"
 )
 
-func runScheduledPublishLoop(pool *pgxpool.Pool) {
+func runScheduledPublishLoop(pool *pgxpool.Pool, baseURL string) {
 	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
 
@@ -27,17 +27,41 @@ func runScheduledPublishLoop(pool *pgxpool.Pool) {
 		func() {
 			ctx, cancel := db.WithTimeout()
 			defer cancel()
-			if _, err := pool.Exec(ctx,
+
+			pageRows, err := pool.Query(ctx,
 				`UPDATE pages SET status='published', published_at=now(), scheduled_publish_at=NULL
-				 WHERE status='draft' AND scheduled_publish_at IS NOT NULL AND scheduled_publish_at <= now()`,
-			); err != nil {
+				 WHERE status='draft' AND scheduled_publish_at IS NOT NULL AND scheduled_publish_at <= now()
+				 RETURNING slug`)
+			if err != nil {
 				log.Printf("scheduled publish (pages) failed: %v", err)
+			} else {
+				var urls []string
+				for pageRows.Next() {
+					var slug string
+					if pageRows.Scan(&slug) == nil {
+						urls = append(urls, baseURL+"/"+slug)
+					}
+				}
+				pageRows.Close()
+				handlers.PingIndexNow(pool, baseURL, urls)
 			}
-			if _, err := pool.Exec(ctx,
+
+			appRows, err := pool.Query(ctx,
 				`UPDATE apps SET status='published', published_at=now(), scheduled_publish_at=NULL
-				 WHERE status='draft' AND scheduled_publish_at IS NOT NULL AND scheduled_publish_at <= now()`,
-			); err != nil {
+				 WHERE status='draft' AND scheduled_publish_at IS NOT NULL AND scheduled_publish_at <= now()
+				 RETURNING slug`)
+			if err != nil {
 				log.Printf("scheduled publish (apps) failed: %v", err)
+			} else {
+				var urls []string
+				for appRows.Next() {
+					var slug string
+					if appRows.Scan(&slug) == nil {
+						urls = append(urls, baseURL+"/apps/"+slug)
+					}
+				}
+				appRows.Close()
+				handlers.PingIndexNow(pool, baseURL, urls)
 			}
 		}()
 	}
@@ -83,77 +107,104 @@ func main() {
 	e.POST("/auth/logout", authH.Logout, authmw.RequireAuth(jwtSecret))
 	e.GET("/auth/me", authH.Me, authmw.RequireAuth(jwtSecret))
 
-	pageH := &handlers.PageHandler{Pool: pool}
+	capMw := func(capability string) echo.MiddlewareFunc {
+		return authmw.RequireCapability(jwtSecret, pool, capability)
+	}
+	auth := authmw.RequireAuth(jwtSecret)
+
+	pageH := &handlers.PageHandler{Pool: pool, BaseURL: "https://lecode.tech"}
 	e.GET("/api/pages/public", pageH.ListPublic)
 	e.GET("/api/pages/public/:slug", pageH.GetBySlug)
 	e.GET("/api/pages/preview/:id", pageH.PreviewByID)
 
-	pagesGroup := e.Group("/api/pages", authmw.RequireAuth(jwtSecret))
+	pagesGroup := e.Group("/api/pages", auth)
 	pagesGroup.GET("", pageH.List)
 	pagesGroup.GET("/:id", pageH.Get)
-	pagesGroup.POST("", pageH.Create)
-	pagesGroup.PUT("/:id", pageH.Update)
-	pagesGroup.PATCH("/:id/quick-edit", pageH.QuickEdit)
-	pagesGroup.POST("/:id/publish", pageH.Publish)
-	pagesGroup.POST("/:id/unpublish", pageH.Unpublish)
-	pagesGroup.POST("/:id/schedule", pageH.Schedule)
-	pagesGroup.POST("/:id/schedule/cancel", pageH.CancelSchedule)
-	pagesGroup.DELETE("/:id", pageH.Delete)
 	pagesGroup.GET("/:id/revisions", pageH.ListRevisions)
+	pagesWrite := e.Group("/api/pages", capMw("pages.write"))
+	pagesWrite.POST("", pageH.Create)
+	pagesWrite.PUT("/:id", pageH.Update)
+	pagesWrite.PATCH("/:id/quick-edit", pageH.QuickEdit)
+	pagesWrite.POST("/:id/publish", pageH.Publish)
+	pagesWrite.POST("/:id/unpublish", pageH.Unpublish)
+	pagesWrite.POST("/:id/schedule", pageH.Schedule)
+	pagesWrite.POST("/:id/schedule/cancel", pageH.CancelSchedule)
+	pagesWrite.POST("/:id/restore", pageH.Restore)
+	pagesWrite.POST("/:id/submit-review", pageH.SubmitReview)
+	e.DELETE("/api/pages/:id", pageH.Delete, capMw("pages.delete"))
+	e.DELETE("/api/pages/:id/permanent", pageH.PermanentDelete, authmw.RequireRole(jwtSecret, pool, "admin"))
+	e.POST("/api/pages/:id/review-decision", pageH.ReviewDecision, authmw.RequireRole(jwtSecret, pool, "admin"))
 
-	appH := &handlers.AppHandler{Pool: pool}
+	appH := &handlers.AppHandler{Pool: pool, BaseURL: "https://lecode.tech"}
 	e.GET("/api/apps/public", appH.ListPublic)
 	e.GET("/api/apps/public/:slug", appH.GetBySlugPublic)
 
-	appsGroup := e.Group("/api/apps", authmw.RequireAuth(jwtSecret))
+	appsGroup := e.Group("/api/apps", auth)
 	appsGroup.GET("", appH.List)
 	appsGroup.GET("/categories", appH.Categories)
 	appsGroup.GET("/:id", appH.Get)
-	appsGroup.POST("", appH.Create)
-	appsGroup.PUT("/:id", appH.Update)
-	appsGroup.PATCH("/:id/quick-edit", appH.QuickEdit)
-	appsGroup.POST("/:id/publish", appH.Publish)
-	appsGroup.POST("/:id/unpublish", appH.Unpublish)
-	appsGroup.POST("/:id/schedule", appH.Schedule)
-	appsGroup.POST("/:id/schedule/cancel", appH.CancelSchedule)
-	appsGroup.DELETE("/:id", appH.Delete)
-	appsGroup.POST("/:id/screenshots", appH.AddScreenshot)
-	appsGroup.PUT("/:id/screenshots/:screenshotId", appH.UpdateScreenshot)
-	appsGroup.DELETE("/:id/screenshots/:screenshotId", appH.DeleteScreenshot)
+	appsWrite := e.Group("/api/apps", capMw("apps.write"))
+	appsWrite.POST("", appH.Create)
+	appsWrite.PUT("/:id", appH.Update)
+	appsWrite.PATCH("/:id/quick-edit", appH.QuickEdit)
+	appsWrite.POST("/:id/publish", appH.Publish)
+	appsWrite.POST("/:id/unpublish", appH.Unpublish)
+	appsWrite.POST("/:id/schedule", appH.Schedule)
+	appsWrite.POST("/:id/schedule/cancel", appH.CancelSchedule)
+	appsWrite.POST("/:id/restore", appH.Restore)
+	appsWrite.POST("/:id/submit-review", appH.SubmitReview)
+	appsWrite.POST("/:id/screenshots", appH.AddScreenshot)
+	appsWrite.PUT("/:id/screenshots/:screenshotId", appH.UpdateScreenshot)
+	appsWrite.DELETE("/:id/screenshots/:screenshotId", appH.DeleteScreenshot)
+	e.DELETE("/api/apps/:id", appH.Delete, capMw("apps.delete"))
+	e.DELETE("/api/apps/:id/permanent", appH.PermanentDelete, authmw.RequireRole(jwtSecret, pool, "admin"))
+	e.POST("/api/apps/:id/review-decision", appH.ReviewDecision, authmw.RequireRole(jwtSecret, pool, "admin"))
 
 	mediaH := &handlers.MediaHandler{Pool: pool, UploadDir: "uploads", PublicBase: "/uploads"}
 	e.Static("/uploads", "uploads")
 
-	mediaGroup := e.Group("/api/media", authmw.RequireAuth(jwtSecret))
+	mediaGroup := e.Group("/api/media", auth)
 	mediaGroup.GET("", mediaH.List)
-	mediaGroup.POST("/upload", mediaH.Upload)
-	mediaGroup.PUT("/:id", mediaH.UpdateAltText)
-	mediaGroup.DELETE("/:id", mediaH.Delete)
+	mediaGroup.GET("/:id/usage", mediaH.Usage)
+	mediaWrite := e.Group("/api/media", capMw("media.write"))
+	mediaWrite.POST("/upload", mediaH.Upload)
+	mediaWrite.PUT("/:id", mediaH.UpdateAltText)
+	e.DELETE("/api/media/:id", mediaH.Delete, capMw("media.delete"))
 
 	redirectH := &handlers.RedirectHandler{Pool: pool}
 	e.GET("/api/redirects/lookup", redirectH.Lookup)
-	redirectsGroup := e.Group("/api/redirects", authmw.RequireAuth(jwtSecret))
+	redirectsGroup := e.Group("/api/redirects", auth)
 	redirectsGroup.GET("", redirectH.List)
-	redirectsGroup.POST("", redirectH.Create)
-	redirectsGroup.DELETE("/:id", redirectH.Delete)
+	e.POST("/api/redirects", redirectH.Create, capMw("redirects.write"))
+	e.DELETE("/api/redirects/:id", redirectH.Delete, capMw("redirects.delete"))
+
+	formsH := &handlers.FormsHandler{Pool: pool}
+	e.POST("/api/forms/submit", formsH.Submit)
+	submissionsGroup := e.Group("/api/submissions", auth)
+	submissionsGroup.GET("", formsH.List)
+	submissionsGroup.GET("/unread-count", formsH.UnreadCount)
+	e.PATCH("/api/submissions/:id/read", formsH.MarkRead, capMw("submissions.write"))
+	e.DELETE("/api/submissions/:id", formsH.Delete, capMw("submissions.delete"))
 
 	auditH := &handlers.AuditHandler{Pool: pool}
-	e.GET("/api/audit-logs", auditH.List, authmw.RequireAuth(jwtSecret))
+	e.GET("/api/audit-logs", auditH.List, auth)
 
 	settingsH := &handlers.SettingsHandler{Pool: pool}
 	e.GET("/api/settings/public", settingsH.ListPublic)
-	settingsGroup := e.Group("/api/settings", authmw.RequireAuth(jwtSecret))
+	settingsGroup := e.Group("/api/settings", auth)
 	settingsGroup.GET("", settingsH.List)
-	settingsGroup.PUT("", settingsH.Update)
+	settingsGroup.GET("/history", settingsH.History)
+	e.PUT("/api/settings", settingsH.Update, capMw("settings.write"))
 
 	navH := &handlers.NavHandler{Pool: pool}
 	e.GET("/api/nav-items/public", navH.ListPublic)
-	navGroup := e.Group("/api/nav-items", authmw.RequireAuth(jwtSecret))
+	navGroup := e.Group("/api/nav-items", auth)
 	navGroup.GET("", navH.List)
-	navGroup.POST("", navH.Create)
-	navGroup.PUT("/reorder", navH.Reorder)
-	navGroup.PUT("/:id", navH.Update)
-	navGroup.DELETE("/:id", navH.Delete)
+	navWrite := e.Group("/api/nav-items", capMw("nav.write"))
+	navWrite.POST("", navH.Create)
+	navWrite.PUT("/reorder", navH.Reorder)
+	navWrite.PUT("/:id", navH.Update)
+	e.DELETE("/api/nav-items/:id", navH.Delete, capMw("nav.delete"))
 
 	userH := &handlers.UserHandler{Pool: pool}
 	usersGroup := e.Group("/api/users", authmw.RequireRole(jwtSecret, pool, "admin"))
@@ -161,39 +212,46 @@ func main() {
 	usersGroup.POST("/invite", userH.Invite)
 	usersGroup.PUT("/:id/role", userH.UpdateRole)
 	usersGroup.PUT("/:id/active", userH.UpdateActive)
+	usersGroup.DELETE("/:id", userH.Delete)
+	usersGroup.POST("/:id/restore", userH.Restore)
 
 	blogH := &handlers.BlogHandler{Pool: pool, BaseURL: "https://lecode.tech"}
 	e.GET("/api/blog/public", blogH.ListPublic)
 	e.GET("/api/blog/public/:slug", blogH.GetBySlugPublic)
-	e.GET("/blog/feed.xml", blogH.Feed)
 
-	blogGroup := e.Group("/api/blog", authmw.RequireAuth(jwtSecret))
+	blogGroup := e.Group("/api/blog", auth)
 	blogGroup.GET("", blogH.List)
 	blogGroup.GET("/tags", blogH.Tags)
 	blogGroup.GET("/:id", blogH.Get)
-	blogGroup.POST("", blogH.Create)
-	blogGroup.PUT("/:id", blogH.Update)
-	blogGroup.PATCH("/:id/quick-edit", blogH.QuickEdit)
-	blogGroup.POST("/:id/publish", blogH.Publish)
-	blogGroup.POST("/:id/unpublish", blogH.Unpublish)
-	blogGroup.POST("/:id/schedule", blogH.Schedule)
-	blogGroup.POST("/:id/schedule/cancel", blogH.CancelSchedule)
-	blogGroup.DELETE("/:id", blogH.Delete)
+	blogWrite := e.Group("/api/blog", capMw("blog.write"))
+	blogWrite.POST("", blogH.Create)
+	blogWrite.PUT("/:id", blogH.Update)
+	blogWrite.PATCH("/:id/quick-edit", blogH.QuickEdit)
+	blogWrite.POST("/:id/publish", blogH.Publish)
+	blogWrite.POST("/:id/unpublish", blogH.Unpublish)
+	blogWrite.POST("/:id/schedule", blogH.Schedule)
+	blogWrite.POST("/:id/schedule/cancel", blogH.CancelSchedule)
+	blogWrite.POST("/:id/restore", blogH.Restore)
+	blogWrite.POST("/:id/submit-review", blogH.SubmitReview)
+	e.DELETE("/api/blog/:id", blogH.Delete, capMw("blog.delete"))
+	e.DELETE("/api/blog/:id/permanent", blogH.PermanentDelete, authmw.RequireRole(jwtSecret, pool, "admin"))
+	e.POST("/api/blog/:id/review-decision", blogH.ReviewDecision, authmw.RequireRole(jwtSecret, pool, "admin"))
 
 	testimonialH := &handlers.TestimonialHandler{Pool: pool}
 	e.GET("/api/testimonials/public", testimonialH.ListPublic)
-	testimonialGroup := e.Group("/api/testimonials", authmw.RequireAuth(jwtSecret))
+	testimonialGroup := e.Group("/api/testimonials", auth)
 	testimonialGroup.GET("", testimonialH.List)
-	testimonialGroup.POST("", testimonialH.Create)
-	testimonialGroup.PUT("/:id", testimonialH.Update)
-	testimonialGroup.DELETE("/:id", testimonialH.Delete)
+	e.POST("/api/testimonials", testimonialH.Create, capMw("testimonials.write"))
+	e.PUT("/api/testimonials/:id", testimonialH.Update, capMw("testimonials.write"))
+	e.DELETE("/api/testimonials/:id", testimonialH.Delete, capMw("testimonials.delete"))
 
 	templateH := &handlers.TemplateHandler{Pool: pool}
 	e.GET("/api/templates/active", templateH.GetActivePublic)
-	templateGroup := e.Group("/api/templates", authmw.RequireAuth(jwtSecret))
+	templateGroup := e.Group("/api/templates", auth)
 	templateGroup.GET("", templateH.List)
-	templateGroup.POST("/:id/activate", templateH.Activate)
-	templateGroup.PUT("/:id", templateH.Update)
+	templateWrite := e.Group("/api/templates", capMw("templates.write"))
+	templateWrite.POST("/:id/activate", templateH.Activate)
+	templateWrite.PUT("/:id", templateH.Update)
 
 	analyticsH := &handlers.AnalyticsHandler{Pool: pool}
 	e.POST("/api/track", analyticsH.Track)
@@ -204,7 +262,17 @@ func main() {
 	e.GET("/robots.txt", seoH.Robots)
 	e.GET("/llms.txt", seoH.LLMsTxt)
 
-	go runScheduledPublishLoop(pool)
+	// IndexNow verification file, served under /api/ (see seo.go's PingIndexNow for why it's
+	// not at the conventional domain-root "/<key>.txt" — Caddy doesn't proxy that path here).
+	// Registered dynamically off the real key rather than a fixed path since the key itself is
+	// generated on first boot.
+	if indexNowKey := handlers.EnsureIndexNowKey(pool); indexNowKey != "" {
+		e.GET("/api/"+indexNowKey+".txt", func(c echo.Context) error {
+			return c.String(http.StatusOK, indexNowKey)
+		})
+	}
+
+	go runScheduledPublishLoop(pool, "https://lecode.tech")
 
 	port := os.Getenv("PORT")
 	if port == "" {
